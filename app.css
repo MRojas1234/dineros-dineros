@@ -564,3 +564,23 @@ textarea { resize: vertical; }
 .historial-palo.h5 { height: 50%; } .historial-palo.h6 { height: 60%; }
 .historial-palo.h7 { height: 70%; } .historial-palo.h8 { height: 80%; }
 .historial-palo.h9 { height: 90%; } .historial-palo.h10 { height: 100%; background: var(--verde); }
+
+/* ───────────────── La gráfica del año (lo que vino del Excel) ───────────────── */
+
+/* Ahora hay dos dibujos en la misma tarjeta: el año que ya traía y el mes que
+   lleva registrado aquí. Cada uno con su rótulo, para que nadie los confunda, y
+   una raya en medio. El promedio del año va en color de texto normal a propósito:
+   no es un número bueno ni malo, es el tamaño de su vida. */
+.grafica-rotulo {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--texto-suave);
+  letter-spacing: -.01em;
+  margin: 10px 0 0;
+}
+
+.raya-grafica {
+  border: 0;
+  border-top: 1px solid var(--borde);
+  margin: 20px 0 2px;
+}

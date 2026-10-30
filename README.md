@@ -47,6 +47,16 @@ justo lo que el simulador va a necesitar.
                "correo": "", "historial": {"ene": 0}, "revisar": "", "nota": "" } ] }
 ```
 
+`historial` lleva **un solo formato de llave: `ene`..`dic`**, y lo lleva por una
+razón. Al importar la hoja de cálculo real, la mitad de los conceptos entró con
+`"01"`..`"12"` y la otra mitad con `"ene"`..`"dic"`. Cada fijo se dibujaba bien por
+su cuenta — por eso el error se escondió — pero nada que sumara o comparara
+**entre** fijos podía funcionar: para el que sumaba, la mitad de los meses no
+existía. `mesesAlDerecho()` convierte cualquiera de los dos (y también `"ENE "`,
+`"enero"`, `"1"`) al formato único, al importar **y al abrir**, para que nadie
+tenga que volver a importar nada. Un valor de **cero se conserva**: un mes en que
+no pagaste nada es un dato, no un hueco.
+
 `grupo` tiene que ser uno de: `Casa y seguros`, `Servicios`, `Tarjetas y deudas`,
 `Impuestos`, `Otro` — cualquier otra cosa cae en `Otro`. `revisar` pinta un aviso
 rojo dentro del fijo y una raya dorada en la lista; se borra solo en cuanto lo
@@ -55,6 +65,26 @@ editas y guardas.
 **Un archivo así nunca va dentro de este repositorio.** Trae números de cuenta y
 últimos 4; este repositorio es público. Vive en tu computadora, y el `.gitignore`
 está puesto para que no se cuele por accidente.
+
+---
+
+### La gráfica: dos dibujos que no se mezclan
+
+La tarjeta de la pantalla **Hoy** puede mostrar dos cosas, y nunca las suma:
+
+- **Tu año** — barras con lo que salió cada mes, sacado del `historial` de los
+  fijos que importaste. Es el pasado que ya traías cuando llegaste aquí, así que
+  la app lo puede dibujar desde el día uno, sin que hayas registrado nada todavía.
+- **Tu mes** — la línea de lo que tú llevas registrado aquí, día por día.
+
+Un mes con menos de la mitad de los conceptos que el mes mejor llenado se dibuja
+**tenue, se nombra abajo y se queda fuera del promedio**. No se esconde: un hueco
+en tu hoja también dice algo, y taparlo sería inventar un mes que no existió.
+
+El año no se escribe en ninguna parte, porque la hoja de la que salen estos datos
+no lo trae. Van los meses solos.
+
+Todo se dibuja en SVG a mano. No hay librerías de gráficas ni nada que bajar.
 
 ---
 

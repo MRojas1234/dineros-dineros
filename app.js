@@ -84,6 +84,29 @@ const nuevoEstado = () => ({
   respaldo: { ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }
 });
 
+/* ────────── Los meses, en un solo formato ────────── */
+
+// El historial que vino del Excel llegó con DOS formatos de llave distintos:
+// "01".."12" en los gastos de casa, y "ene".."dic" en las tarjetas. Cada fijo se
+// dibujaba bien por su cuenta, y por eso el error no se veía — pero nada que sume
+// o compare ENTRE fijos podía funcionar: la mitad de los meses no existía para el
+// que sumaba. Aquí se convierte todo a un solo formato, al entrar y al abrir.
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function mesesAlDerecho(h) {
+  if (!h || typeof h !== 'object') return null;
+  const limpio = {};
+  Object.keys(h).forEach((k) => {
+    const n = parseInt(k, 10);
+    const llave = (n >= 1 && n <= 12) ? MESES[n - 1] : String(k).toLowerCase().trim().slice(0, 3);
+    if (MESES.indexOf(llave) < 0) return;
+    const v = parseFloat(h[k]);
+    if (isNaN(v)) return;
+    limpio[llave] = v;
+  });
+  return Object.keys(limpio).length ? limpio : null;
+}
+
 let estado = nuevoEstado();
 
 function cargar() {
@@ -92,6 +115,10 @@ function cargar() {
     if (!crudo) return false;
     const leido = JSON.parse(crudo);
     estado = Object.assign(nuevoEstado(), leido);
+    if (!Array.isArray(estado.fijos)) estado.fijos = [];
+    // Los fijos que ya estaban guardados pueden traer el historial en el formato
+    // viejo. Se arregla aquí, al abrir, para que nadie tenga que importar de nuevo.
+    estado.fijos.forEach((f) => { f.historial = mesesAlDerecho(f.historial); });
     estado.respaldo = Object.assign({ ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }, leido.respaldo || {});
     return true;
   } catch (e) {
@@ -256,17 +283,21 @@ function pintarMeta() {
 // La gráfica se dibuja a mano, en SVG, aquí mismo. No hay librerías de nadie
 // ni nada que bajar de internet.
 //
+// Son dos dibujos distintos y a propósito no se mezclan:
+//   · Su año  — lo que salió cada mes, según el Excel que ya traía.
+//   · Su mes  — lo que lleva registrado aquí, día por día.
+// Juntarlos en una sola línea daría un número que no significa nada.
+//
 // Solo grafica la moneda que traes puesta: dos monedas distintas no se suman
 // en una misma línea, porque esa línea mentiría.
 function pintarGrafica() {
   const caja = $('#tarjeta-grafica');
-  const mon = estado.moneda;
-  const todos = mesActual();
-  const mes = todos.filter((m) => (m.moneda || mon) === mon);
-  const otras = todos.length - mes.length;
+  const ano = graficaDelAno();
+  const mes = graficaDelMes();
 
   const cabecera =
-    '<div class="grafica-cabecera"><h3>Tu balance del mes</h3>' +
+    '<div class="grafica-cabecera"><h3>' +
+    (ano ? 'Tu dinero en el tiempo' : 'Tu balance del mes') + '</h3>' +
     '<button class="btn btn-chico" data-accion="grafica">' +
     (estado.ver_grafica ? 'Ocultar' : 'Mostrar') + '</button></div>';
 
@@ -276,13 +307,111 @@ function pintarGrafica() {
     return;
   }
 
-  if (!mes.length) {
+  if (!ano && !mes) {
     caja.innerHTML = cabecera +
       '<p class="parrafo sin-margen">Este mes todavía no hay nada que dibujar. ' +
       'Con el primer movimiento aparece el punto de arranque, y del segundo en ' +
       'adelante se empieza a ver la línea. Esa diferencia es la que motiva.</p>';
     return;
   }
+
+  caja.innerHTML = cabecera + ano + (ano && mes ? '<hr class="raya-grafica">' : '') + mes;
+}
+
+// Lo que salió cada mes, según su propio Excel. No son movimientos registrados
+// aquí: es el año que ya traía puesto cuando llegó a esta app.
+//
+// Un mes al que le faltan conceptos NO se tapa ni se esconde: se pinta tenue, se
+// nombra abajo y se deja fuera del promedio. Un hueco en su hoja es un dato, no
+// un error que haya que maquillar.
+function graficaDelAno() {
+  const mon = estado.moneda;
+  const suma = {}, cuantos = {};
+  MESES.forEach((m) => { suma[m] = 0; cuantos[m] = 0; });
+
+  let afuera = 0;
+  estado.fijos.forEach((f) => {
+    const h = f.historial;
+    if (!h) return;
+    if ((f.moneda || mon) !== mon) { afuera += 1; return; }
+    MESES.forEach((m) => {
+      const v = Number(h[m]);
+      if (!v) return;
+      suma[m] += v;
+      cuantos[m] += 1;
+    });
+  });
+
+  const conDato = MESES.filter((m) => cuantos[m] > 0);
+  if (!conDato.length) return '';
+
+  // Un mes cuenta como completo si trae al menos la mitad de los conceptos que
+  // trae el mes mejor llenado. Así un septiembre a medias no se disfraza de mes
+  // bueno ni le baja el promedio a los demás.
+  const masLleno = Math.max.apply(null, conDato.map((m) => cuantos[m]));
+  const aMedias = (m) => cuantos[m] * 2 < masLleno;
+  const llenos = conDato.filter((m) => !aMedias(m));
+  const flojos = conDato.filter(aMedias);
+
+  const techo = Math.max.apply(null, conDato.map((m) => suma[m]));
+  const base = llenos.length ? llenos : conDato;
+  const prom = base.reduce((s, m) => s + suma[m], 0) / base.length;
+
+  const W = 320, H = 152, aba = 26, arr = 10;
+  const zona = H - arr - aba;
+  const paso = W / conDato.length;
+  const grueso = Math.min(28, paso * 0.6);
+  const altoDe = (v) => Math.max(2, (zona * v) / techo);
+
+  let barras = '', rotulos = '';
+  conDato.forEach((m, i) => {
+    const cx = paso * i + paso / 2;
+    const h = altoDe(suma[m]);
+    barras += '<rect x="' + (cx - grueso / 2).toFixed(1) + '" y="' + (H - aba - h).toFixed(1) +
+      '" width="' + grueso.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="4" fill="' +
+      (aMedias(m) ? 'var(--verde-tenue)' : 'var(--verde)') + '"/>';
+    rotulos += '<text x="' + cx.toFixed(1) + '" y="' + (H - aba + 13) +
+      '" text-anchor="middle" font-size="10" fill="var(--texto-suave)">' + m + '</text>';
+  });
+
+  const yProm = (H - aba - altoDe(prom)).toFixed(1);
+  const rayaProm = '<line x1="0" y1="' + yProm + '" x2="' + W + '" y2="' + yProm +
+    '" stroke="var(--texto-suave)" stroke-width="1" stroke-dasharray="4 4"/>';
+
+  const svg = '<svg class="grafica-lienzo" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
+    'aria-label="Lo que salió cada mes, según tu Excel">' +
+    barras + rayaProm + rotulos + '</svg>';
+
+  const arriba = conDato.reduce((a, m) => (suma[m] > suma[a] ? m : a), conDato[0]);
+  const abajo = llenos.length
+    ? llenos.reduce((a, m) => (suma[m] < suma[a] ? m : a), llenos[0]) : arriba;
+
+  return '<h4 class="grafica-rotulo">Tu año, el que ya traías</h4>' + svg +
+    '<p class="grafica-cierre">' + escapar(dinero(prom, mon)) + ' al mes</p>' +
+    '<p class="parrafo margen-chico">Es tu promedio de ' + base.length + ' mes' +
+      (base.length === 1 ? '' : 'es') + ', y la raya punteada es esa misma línea. ' +
+      'Tu mes más pesado fue <strong>' + arriba + '</strong>, con ' +
+      escapar(dinero(suma[arriba], mon)) +
+      (abajo !== arriba ? ', y el más ligero <strong>' + abajo + '</strong>, con ' +
+        escapar(dinero(suma[abajo], mon)) : '') + '.</p>' +
+    (flojos.length
+      ? '<p class="pista">Las barras tenues (' + flojos.join(', ') + ') están ' +
+        'incompletas en tu hoja: a varios conceptos les falta el dato de ese mes. ' +
+        'Las dejo a la vista en lugar de esconderlas, y fuera del promedio.</p>'
+      : '') +
+    '<p class="pista">Viene de tu Excel, de los fijos que trajiste. El año no está ' +
+      'escrito en ninguna parte de esa hoja, así que aquí van solo los meses.' +
+      (afuera > 0 ? ' ' + afuera + ' fijo' + (afuera === 1 ? '' : 's') + ' en otra ' +
+        'moneda no entra' + (afuera === 1 ? '' : 'n') + ' en este dibujo.' : '') + '</p>';
+}
+
+// Lo que lleva registrado ella misma este mes, acumulado día por día.
+function graficaDelMes() {
+  const mon = estado.moneda;
+  const todos = mesActual();
+  const mes = todos.filter((m) => (m.moneda || mon) === mon);
+  const otras = todos.length - mes.length;
+  if (!mes.length) return '';
 
   // Un punto por día con movimientos, acumulando lo que entró menos lo que salió.
   const porDia = {};
@@ -338,7 +467,7 @@ function pintarGrafica() {
     '</svg>';
 
   const cierre = puntos[puntos.length - 1].v;
-  caja.innerHTML = cabecera + svg +
+  return '<h4 class="grafica-rotulo">Este mes, lo que llevas registrado</h4>' + svg +
     '<p class="grafica-cierre ' + (cierre >= 0 ? 'sube' : 'baja') + '">' +
       (cierre >= 0 ? '+' : '−') + escapar(dinero(Math.abs(cierre), mon)) + '</p>' +
     '<p class="parrafo margen-chico">Es lo que entró menos lo que salió en ' +
@@ -352,7 +481,6 @@ function pintarGrafica() {
         'distintas no se suman.</p>'
       : '');
 }
-
 function pintarCifrasDelMes() {
   const mes = mesActual();
   $('#mes-entro').textContent = escribirSumas(sumaPorMoneda(mes.filter((m) => m.tipo === 'entrada')));
@@ -825,7 +953,7 @@ async function importarFijos(archivo) {
     f.autopago = !!crudo.autopago;
     CAMPOS_SENSIBLES.forEach((c) => { f[c] = String(crudo[c] || '').trim(); });
     f.ultimos4 = f.ultimos4.slice(-4);
-    f.historial = crudo.historial && typeof crudo.historial === 'object' ? crudo.historial : null;
+    f.historial = mesesAlDerecho(crudo.historial);
     f.revisar = String(crudo.revisar || '').trim();
     f.nota = String(crudo.nota || '').trim();
     estado.fijos.push(f);
