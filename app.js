@@ -335,8 +335,13 @@ function graficaDelAno() {
     if (!h) return;
     if ((f.moneda || mon) !== mon) { afuera += 1; return; }
     MESES.forEach((m) => {
+      // Un mes sin llave es un hueco; un mes que vale 0 es un dato. No son lo
+      // mismo y no se pueden contar igual: si el cero no contara, un mes bien
+      // llenado de ceros parecería incompleto y se saldría del promedio. Esto
+      // ya mordió una vez, con una tarjeta cuyos últimos tres meses fueron 0.
+      if (!Object.prototype.hasOwnProperty.call(h, m)) return;
       const v = Number(h[m]);
-      if (!v) return;
+      if (isNaN(v)) return;
       suma[m] += v;
       cuantos[m] += 1;
     });
@@ -361,7 +366,9 @@ function graficaDelAno() {
   const zona = H - arr - aba;
   const paso = W / conDato.length;
   const grueso = Math.min(28, paso * 0.6);
-  const altoDe = (v) => Math.max(2, (zona * v) / techo);
+  // Si TODO el año fuera cero, dividir entre el techo daría NaN y no se
+  // dibujaría nada. Con cero de verdad las barras quedan al mínimo, visibles.
+  const altoDe = (v) => techo > 0 ? Math.max(2, (zona * v) / techo) : 2;
 
   let barras = '', rotulos = '';
   conDato.forEach((m, i) => {
