@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Este candado lo pone el navegador, no yo. connect-src 'none' significa que
+     esta página NO PUEDE mandar datos a ningún lado, aunque alguien metiera
+     código que lo intentara. Es la promesa de privacidad, pero obligada. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; worker-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'">
+<meta name="theme-color" content="#146B50">
+<meta name="description" content="Tu dinero, en tu teléfono. Nada sale de aquí.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dineros">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icono-192.png">
+<link rel="apple-touch-icon" href="./icono-192.png">
+<link rel="stylesheet" href="./app.css">
+<title>Dineros Dineros</title>
+</head>
+<body>
+
+<!-- ───────── Primera vez: moneda y nombre ───────── -->
+<div id="bienvenida" class="telon oculto">
+  <div class="telon-caja">
+    <h1 class="bienvenida-titulo">Dineros Dineros</h1>
+    <p class="bienvenida-sub">Tu dinero, en tu teléfono. Nada sale de aquí.</p>
+
+    <div class="campo">
+      <label for="bv-nombre">¿Cómo te llamas? <span class="opc">opcional</span></label>
+      <input id="bv-nombre" type="text" autocomplete="off" placeholder="Para saludarte al abrir">
+    </div>
+
+    <div class="campo">
+      <label>¿En qué moneda manejas tu dinero?</label>
+      <div class="monedas" id="bv-monedas">
+        <button type="button" class="moneda" data-moneda="USD">
+          <strong>Dólares</strong><span>USD · $</span>
+        </button>
+        <button type="button" class="moneda" data-moneda="MXN">
+          <strong>Pesos</strong><span>MXN · $</span>
+        </button>
+      </div>
+      <p class="pista">Se queda fija y se escribe junto a cada cantidad. La app
+        <strong>no convierte</strong> entre monedas: convertir necesitaría internet,
+        y el trato es que nada salga de tu teléfono.</p>
+    </div>
+
+    <button id="bv-listo" class="btn btn-principal btn-ancho" disabled>Empezar</button>
+  </div>
+</div>
+
+<!-- ───────── La app ───────── -->
+<header class="cabecera">
+  <div class="cabecera-fila">
+    <div>
+      <h1 id="saludo">Dineros Dineros</h1>
+      <p id="fecha-hoy" class="cabecera-fecha"></p>
+    </div>
+    <span id="insignia-moneda" class="insignia"></span>
+  </div>
+</header>
+
+<main>
+
+<!-- ======== HOY ======== -->
+<section id="vista-hoy" class="vista">
+
+  <div id="aviso-respaldo" class="aviso oculto" role="status"></div>
+
+  <article class="tarjeta versiculo">
+    <p class="versiculo-texto" id="versiculo-texto"></p>
+    <p class="versiculo-ref" id="versiculo-ref"></p>
+    <p class="versiculo-pie">Reina-Valera 1909 · dominio público</p>
+  </article>
+
+  <article class="tarjeta meta" id="tarjeta-meta"></article>
+
+  <div class="dos-columnas">
+    <article class="tarjeta cifra entro">
+      <p class="cifra-rotulo">Entró este mes</p>
+      <p class="cifra-numero" id="mes-entro">—</p>
+    </article>
+    <article class="tarjeta cifra salio">
+      <p class="cifra-rotulo">Salió este mes</p>
+      <p class="cifra-numero" id="mes-salio">—</p>
+    </article>
+  </div>
+
+  <article class="tarjeta" id="tarjeta-grafica"></article>
+
+  <article class="tarjeta" id="tarjeta-constancia"></article>
+
+  <article class="tarjeta" id="tarjeta-radiografia-resumen"></article>
+
+  <button class="btn btn-principal btn-ancho btn-grande" data-abrir="registro">
+    Registrar un movimiento
+  </button>
+</section>
+
+<!-- ======== MOVIMIENTOS ======== -->
+<section id="vista-movimientos" class="vista oculto">
+  <div class="filtros" id="filtros">
+    <button class="filtro activo" data-filtro="todos">Todos</button>
+    <button class="filtro" data-filtro="entrada">Lo que entró</button>
+    <button class="filtro" data-filtro="salida">Lo que salió</button>
+  </div>
+  <div id="lista-movimientos"></div>
+  <button class="btn btn-principal btn-ancho btn-grande" data-abrir="registro">
+    Registrar un movimiento
+  </button>
+</section>
+
+<!-- ======== RADIOGRAFÍA ======== -->
+<section id="vista-radiografia" class="vista oculto">
+  <article class="tarjeta">
+    <h2>Tu radiografía</h2>
+    <p class="parrafo">Unas pocas preguntas, contestadas con calma, <strong>guardadas
+      con su fecha</strong>. No se borran ni se encima una sobre otra: cada vez que la
+      contestas se guarda una nueva, para que dentro de seis meses puedas comparar
+      quién eras hoy.</p>
+    <button class="btn btn-principal" data-abrir="radiografia">Contestar una radiografía</button>
+  </article>
+  <div id="lista-radiografias"></div>
+</section>
+
+<!-- ======== RESPALDO ======== -->
+<section id="vista-respaldo" class="vista oculto">
+
+  <article class="tarjeta">
+    <h2>Tu respaldo</h2>
+    <p id="estado-respaldo" class="estado-respaldo"></p>
+    <p class="parrafo">Todo lo tuyo vive <strong>nada más en este teléfono</strong>.
+      Si se borran los datos del navegador o se pierde el aparato, se va — a menos
+      que tengas un archivo guardado en otro lado.</p>
+
+    <div class="botonera">
+      <button class="btn btn-principal" id="btn-respaldo-numeros">Guardar respaldo de números</button>
+      <button class="btn" id="btn-respaldo-completo">Guardar respaldo completo</button>
+    </div>
+    <p class="pista">Son <strong>dos archivos distintos a propósito.</strong> El de
+      números trae montos, categorías y fechas. El completo trae además
+      <strong>lo que escribiste de ti</strong>: tus radiografías y lo que sentiste en
+      cada movimiento. Ese segundo no lo mandes por WhatsApp ni por correo — ahí se
+      queda, en los servidores de alguien más. Ese va a una memoria o a tu computadora.</p>
+  </article>
+
+  <article class="tarjeta">
+    <h3>Probar un respaldo</h3>
+    <p class="parrafo">Un respaldo que nunca abriste no es un respaldo: es una
+      intención. Esto <strong>lee el archivo y te dice qué trae, sin tocar nada</strong>
+      de lo que tienes ahorita.</p>
+    <label class="btn btn-archivo">
+      Elegir archivo para probar
+      <input type="file" id="archivo-probar" accept="application/json,.json" hidden>
+    </label>
+    <div id="resultado-prueba"></div>
+  </article>
+
+  <article class="tarjeta peligro">
+    <h3>Restaurar</h3>
+    <p class="parrafo">Esto <strong>reemplaza</strong> lo que tienes hoy por lo que
+      traiga el archivo. Antes te enseño qué trae y te pregunto.</p>
+    <label class="btn btn-archivo">
+      Elegir archivo para restaurar
+      <input type="file" id="archivo-restaurar" accept="application/json,.json" hidden>
+    </label>
+    <div id="resultado-restaurar"></div>
+  </article>
+
+  <article class="tarjeta">
+    <h3>¿El teléfono puede borrar tus datos solo?</h3>
+    <p id="estado-persistencia" class="parrafo"></p>
+    <button class="btn" id="btn-persistir">Pedirle al navegador que no los borre</button>
+  </article>
+
+  <article class="tarjeta">
+    <h3>Qué sale de este teléfono</h3>
+    <p class="parrafo"><strong>Nada.</strong> No hay cuenta, no hay contraseña, no hay
+      servidor, no hay rastreo. Esta app no tiene manera de mandar tus números a
+      ningún lado: el navegador lo tiene prohibido por una regla escrita en el
+      archivo <code>index.html</code> (<code>connect-src 'none'</code>).</p>
+    <p class="parrafo">Lo único que viaja por internet son los archivos de la propia
+      app cuando la abres la primera vez, desde donde esté publicada. Después
+      funciona sin señal.</p>
+    <p class="parrafo pie-legal">Dineros Dineros · licencia MIT · código propio,
+      escrito desde cero. Versículos: Reina-Valera 1909, dominio público.</p>
+  </article>
+
+  <article class="tarjeta">
+    <h3>Tu moneda</h3>
+    <p class="parrafo">Hoy estás en <strong id="moneda-actual"></strong>. Si la
+      cambias, <strong>los movimientos que ya registraste conservan la suya</strong>:
+      cada cantidad guarda su moneda pegada, nunca suelta.</p>
+    <div class="monedas" id="cambiar-moneda">
+      <button type="button" class="moneda" data-moneda="USD"><strong>Dólares</strong><span>USD</span></button>
+      <button type="button" class="moneda" data-moneda="MXN"><strong>Pesos</strong><span>MXN</span></button>
+    </div>
+  </article>
+</section>
+
+</main>
+
+<nav class="pestanas">
+  <button class="pestana activa" data-vista="hoy"><span>Hoy</span></button>
+  <button class="pestana" data-vista="movimientos"><span>Movimientos</span></button>
+  <button class="pestana" data-vista="radiografia"><span>Radiografía</span></button>
+  <button class="pestana" data-vista="respaldo"><span>Respaldo</span></button>
+</nav>
+
+<!-- ───────── Registrar un movimiento ───────── -->
+<div id="modal-registro" class="telon oculto">
+  <div class="telon-caja ancho">
+    <div class="modal-cabecera">
+      <h2>Registrar</h2>
+      <button class="btn-cerrar" data-cerrar="modal-registro" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="cajones">
+
+      <!-- ░░ Cajón de números ░░ -->
+      <div class="cajon cajon-numero">
+        <p class="cajon-rotulo">Es un número</p>
+
+        <div class="tipo" id="tipo">
+          <button type="button" class="tipo-btn activo" data-tipo="salida">Salió</button>
+          <button type="button" class="tipo-btn" data-tipo="entrada">Entró</button>
+        </div>
+
+        <div class="campo">
+          <label for="reg-monto">¿Cuánto?</label>
+          <div class="monto-caja">
+            <span class="monto-signo">$</span>
+            <input id="reg-monto" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+            <span class="monto-moneda" id="reg-moneda"></span>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="reg-categoria">¿De qué?</label>
+          <div class="chips" id="reg-categorias"></div>
+          <input id="reg-categoria" type="text" autocomplete="off" placeholder="O escríbelo tú">
+        </div>
+
+        <div class="campo">
+          <label for="reg-fecha">¿Cuándo?</label>
+          <input id="reg-fecha" type="datetime-local">
+        </div>
+      </div>
+
+      <!-- ░░ Cajón de sentimientos ░░ -->
+      <div class="cajon cajon-sentir">
+        <p class="cajon-rotulo">Es un sentimiento <span class="opc">todo opcional</span></p>
+        <p class="cajon-nota">Un sentimiento no contesta una pregunta de números,
+          ni al revés. Por eso van en cajones separados. Puedes guardar sin tocar
+          nada de este lado.</p>
+
+        <div class="campo">
+          <label>¿Cómo se siente este movimiento?</label>
+          <div class="chips" id="reg-emociones"></div>
+        </div>
+
+        <div class="campo">
+          <label class="casilla">
+            <input type="checkbox" id="reg-gracias">
+            <span id="reg-gracias-texto">Dije gracias al salir</span>
+          </label>
+          <p class="pista">De todo lo que se enseña sobre dinero y emociones, esto es
+            lo único con estudios detrás: la gratitud te vuelve un poco menos
+            impaciente con el dinero. Poquito, pero medido. Cinco segundos, gratis.</p>
+        </div>
+
+        <div class="campo">
+          <label>¿Qué fue esto para ti?</label>
+          <div class="chips" id="reg-verbos"></div>
+        </div>
+
+        <div class="campo">
+          <label for="reg-escrito">¿Quieres dejarlo escrito?</label>
+          <textarea id="reg-escrito" rows="2" placeholder="Lo que sea. Nadie más lo va a leer."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-pie">
+      <button class="btn" data-cerrar="modal-registro">Cancelar</button>
+      <button class="btn btn-principal" id="reg-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── Radiografía ───────── -->
+<div id="modal-radiografia" class="telon oculto">
+  <div class="telon-caja ancho">
+    <div class="modal-cabecera">
+      <h2>Tu radiografía</h2>
+      <button class="btn-cerrar" data-cerrar="modal-radiografia" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="parrafo">Contéstala con honestidad. Se guarda con la fecha de hoy y
+      no se vuelve a preguntar hasta que tú quieras. Lo que dejes en blanco, en
+      blanco se queda.</p>
+    <div id="radio-preguntas"></div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar="modal-radiografia">Ahorita no</button>
+      <button class="btn btn-principal" id="radio-guardar">Guardar mi radiografía</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── Meta ───────── -->
+<div id="modal-meta" class="telon oculto">
+  <div class="telon-caja">
+    <div class="modal-cabecera">
+      <h2>Tu meta</h2>
+      <button class="btn-cerrar" data-cerrar="modal-meta" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="parrafo">Un número sin meta no se puede leer: no sabes si es bueno o
+      malo. Con meta, la app te puede decir <strong>cuánto te falta</strong>, que es
+      lo único que cambia lo que haces hoy.</p>
+    <div class="campo">
+      <label for="meta-titulo">¿Para qué estás juntando?</label>
+      <input id="meta-titulo" type="text" autocomplete="off" placeholder="Por ejemplo: el colchón de enero">
+    </div>
+    <div class="campo">
+      <label for="meta-monto">¿Cuánto quieres juntar?</label>
+      <div class="monto-caja">
+        <span class="monto-signo">$</span>
+        <input id="meta-monto" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+        <span class="monto-moneda" id="meta-moneda"></span>
+      </div>
+    </div>
+    <p class="pista">Lo que juntes se cuenta solo: cada movimiento que marques con la
+      categoría <strong>Mi meta</strong> se le suma.</p>
+    <div class="modal-pie">
+      <button class="btn" id="meta-quitar">Quitar la meta</button>
+      <button class="btn btn-principal" id="meta-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="aviso-flotante" class="aviso-flotante oculto" role="status"></div>
+
+<script src="./versiculos.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

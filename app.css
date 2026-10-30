@@ -1,0 +1,502 @@
+/* Dineros Dineros — paleta elegida por María:
+   verde esmeralda #146B50 · dorado suave #C6A15B · fondo #F7F8F4
+   tarjetas #FFFFFF · texto #24332D                                   */
+
+:root {
+  --verde: #146B50;
+  --verde-hondo: #0F543E;
+  --verde-tenue: #E6F0EB;
+  --dorado: #C6A15B;
+  --dorado-tenue: #F6EFE1;
+  --fondo: #F7F8F4;
+  --tarjeta: #FFFFFF;
+  --texto: #24332D;
+  --texto-suave: #5B6B62;
+  --borde: #E2E6E0;
+  --rojo: #A33B3B;
+  --rojo-tenue: #FBEDED;
+  --sombra: 0 1px 2px rgba(36, 51, 45, .06), 0 8px 24px rgba(36, 51, 45, .05);
+  --radio: 16px;
+  --columna: 560px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --verde: #2E9470;
+    --verde-hondo: #257A5C;
+    --verde-tenue: #14271F;
+    --dorado: #D7B679;
+    --dorado-tenue: #2A2317;
+    --fondo: #121715;
+    --tarjeta: #1B221E;
+    --texto: #E8EDE9;
+    --texto-suave: #9DAAA2;
+    --borde: #2C3531;
+    --rojo: #D97C7C;
+    --rojo-tenue: #2B1C1C;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding: 0 0 92px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0 0 8px; line-height: 1.2; letter-spacing: -.01em; }
+h1 { font-size: 24px; }
+h2 { font-size: 20px; }
+h3 { font-size: 17px; }
+p { margin: 0 0 10px; }
+.oculto { display: none !important; }
+code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: .86em;
+  background: var(--verde-tenue);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+/* ───── Cabecera ───── */
+.cabecera {
+  background: var(--verde);
+  color: #fff;
+  padding: 20px 16px 22px;
+  border-radius: 0 0 24px 24px;
+}
+.cabecera-fila {
+  max-width: var(--columna);
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cabecera h1 { color: #fff; font-size: 22px; }
+.cabecera-fecha { margin: 0; color: rgba(255, 255, 255, .82); font-size: 13px; }
+.insignia {
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .28);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+main { max-width: var(--columna); margin: 0 auto; padding: 16px; }
+.vista { display: flex; flex-direction: column; gap: 14px; }
+
+/* ───── Tarjetas ───── */
+.tarjeta {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+  box-shadow: var(--sombra);
+}
+.tarjeta.peligro { border-color: var(--rojo); }
+.parrafo { color: var(--texto-suave); font-size: 14.5px; }
+.pista { color: var(--texto-suave); font-size: 13px; margin: 8px 0 0; }
+.pie-legal { font-size: 12.5px; margin-top: 14px; }
+.opc { color: var(--texto-suave); font-weight: 400; font-size: 12px; }
+
+/* ───── Versículo ───── */
+.versiculo {
+  background: var(--dorado-tenue);
+  border-color: var(--dorado);
+  border-left-width: 4px;
+}
+.versiculo-texto { font-size: 15.5px; line-height: 1.6; margin-bottom: 8px; }
+.versiculo-ref { font-weight: 700; color: var(--verde); margin: 0; font-size: 14px; }
+.versiculo-pie { margin: 2px 0 0; font-size: 11.5px; color: var(--texto-suave); }
+
+/* ───── Meta y brecha ───── */
+.meta-brecha {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--verde);
+  letter-spacing: -.02em;
+  margin: 2px 0 4px;
+}
+.meta-moneda { font-size: 15px; font-weight: 700; color: var(--texto-suave); margin-left: 4px; }
+/* <progress> en vez de un div con ancho en línea: el candado style-src 'self'
+   bloquea los estilos en línea, y aflojarlo por una barrita no vale la pena. */
+progress.barra {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 10px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 10px 0 6px;
+  background: var(--verde-tenue);
+  color: var(--verde);
+}
+progress.barra::-webkit-progress-bar { background: var(--verde-tenue); border-radius: 999px; }
+progress.barra::-webkit-progress-value { background: var(--verde); border-radius: 999px; }
+progress.barra::-moz-progress-bar { background: var(--verde); border-radius: 999px; }
+
+/* Ayudantes, para no volver a escribir un style= en ningún lado */
+.sin-margen { margin: 0; }
+.margen-chico { margin: 2px 0 0; }
+.nota-pregunta { margin-bottom: 8px; }
+.bloque-resultado { margin-top: 12px; }
+.btn-mini { font-size: 12px; padding: 5px 9px; margin-top: 6px; }
+.estado-respaldo.urgente { color: var(--rojo); }
+.estado-respaldo.bien { color: var(--verde); }
+
+/* ───── Gráfica ───── */
+.grafica-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.grafica-cabecera h3 { margin: 0; }
+.btn-chico { font-size: 12.5px; padding: 6px 11px; border-radius: 999px; }
+.grafica-lienzo { width: 100%; height: auto; display: block; margin: 6px 0 2px; overflow: visible; }
+.grafica-cierre { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0 0; }
+.grafica-cierre.sube { color: var(--verde); }
+.grafica-cierre.baja { color: var(--rojo); }
+
+/* ───── Cifras del mes ───── */
+.dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cifra-rotulo { font-size: 12.5px; color: var(--texto-suave); margin: 0 0 4px; }
+.cifra-numero { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.cifra.entro .cifra-numero { color: var(--verde); }
+.cifra.salio .cifra-numero { color: var(--rojo); }
+
+/* ───── Avisos ───── */
+.aviso {
+  border-radius: var(--radio);
+  padding: 13px 15px;
+  font-size: 14px;
+  border: 1px solid;
+}
+.aviso.urge { background: var(--rojo-tenue); border-color: var(--rojo); color: var(--rojo); }
+.aviso.calma { background: var(--verde-tenue); border-color: var(--verde); color: var(--verde-hondo); }
+.aviso button { margin-top: 8px; }
+.estado-respaldo { font-weight: 700; font-size: 15px; }
+
+.aviso-flotante {
+  position: fixed;
+  left: 50%;
+  bottom: 100px;
+  transform: translateX(-50%);
+  background: var(--texto);
+  color: var(--fondo);
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  z-index: 60;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: var(--sombra);
+}
+
+/* ───── Botones ───── */
+.btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+  background: var(--tarjeta);
+  color: var(--texto);
+  cursor: pointer;
+  text-align: center;
+}
+.btn:hover { border-color: var(--verde); }
+.btn-principal { background: var(--verde); border-color: var(--verde); color: #fff; }
+.btn-principal:hover { background: var(--verde-hondo); border-color: var(--verde-hondo); }
+.btn-principal:disabled { opacity: .45; cursor: not-allowed; }
+.btn-ancho { width: 100%; display: block; }
+.btn-grande { padding: 15px; font-size: 16px; }
+.btn-archivo { display: inline-block; }
+.botonera { display: flex; flex-wrap: wrap; gap: 10px; }
+.botonera .btn { flex: 1 1 200px; }
+.btn-cerrar {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--texto-suave);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+/* ───── Pestañas ───── */
+.pestanas {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--tarjeta);
+  border-top: 1px solid var(--borde);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  z-index: 40;
+}
+.pestana {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  color: var(--texto-suave);
+  padding: 10px 2px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.pestana.activa { color: var(--verde); background: var(--verde-tenue); }
+
+/* ───── Filtros ───── */
+.filtros { display: flex; gap: 8px; flex-wrap: wrap; }
+.filtro {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: var(--tarjeta);
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+.filtro.activo { background: var(--verde); border-color: var(--verde); color: #fff; }
+
+/* ───── Lista de movimientos ───── */
+.dia-rotulo {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--texto-suave);
+  margin: 14px 0 6px;
+}
+.mov {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 13px 15px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  box-shadow: var(--sombra);
+}
+.mov-cuerpo { flex: 1; min-width: 0; }
+.mov-cat { font-weight: 650; }
+.mov-detalle { font-size: 12.5px; color: var(--texto-suave); }
+.mov-escrito {
+  font-size: 13px;
+  color: var(--texto-suave);
+  font-style: italic;
+  margin-top: 5px;
+  padding-left: 10px;
+  border-left: 2px solid var(--dorado);
+}
+.mov-monto { font-weight: 700; white-space: nowrap; text-align: right; }
+.mov.entrada .mov-monto { color: var(--verde); }
+.mov.salida .mov-monto { color: var(--rojo); }
+.mov-moneda { display: block; font-size: 11px; font-weight: 600; color: var(--texto-suave); }
+.etiqueta {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--verde-tenue);
+  color: var(--verde-hondo);
+  margin: 5px 5px 0 0;
+}
+.etiqueta.oro { background: var(--dorado-tenue); color: #7A5F28; }
+.vacio { text-align: center; color: var(--texto-suave); padding: 24px 10px; font-size: 14.5px; }
+
+/* ───── Telón / modales ───── */
+.telon {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 26, .55);
+  z-index: 50;
+  display: flex;
+  /* flex-start + margin-top:auto, NO flex-end: con flex-end, cuando el modal es
+     más alto que la pantalla, lo de arriba se sale del área que hace scroll y
+     queda inalcanzable. Pasó de verdad con la radiografía. */
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.telon-caja {
+  background: var(--fondo);
+  width: 100%;
+  max-width: var(--columna);
+  border-radius: 22px 22px 0 0;
+  padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  margin-top: auto;
+}
+.telon-caja.ancho { max-width: 760px; }
+.modal-cabecera { display: flex; align-items: center; justify-content: space-between; }
+.modal-pie {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  position: sticky;
+  bottom: 0;
+  background: var(--fondo);
+  padding-top: 10px;
+}
+.modal-pie .btn { flex: 1; }
+
+.bienvenida-titulo { font-size: 30px; color: var(--verde); margin-bottom: 2px; }
+.bienvenida-sub { color: var(--texto-suave); margin-bottom: 20px; }
+
+/* ───── Campos ───── */
+.campo { margin-bottom: 15px; }
+.campo > label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+input[type="text"], input[type="number"], input[type="datetime-local"], textarea {
+  font: inherit;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--tarjeta);
+  color: var(--texto);
+}
+input:focus, textarea:focus, button:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 1px;
+}
+textarea { resize: vertical; }
+
+.monto-caja {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--tarjeta);
+  padding: 0 12px;
+}
+.monto-caja:focus-within { outline: 2px solid var(--verde); outline-offset: 1px; }
+.monto-caja input { border: none; outline: none; padding: 12px 0; font-size: 22px; font-weight: 700; background: none; }
+.monto-signo { font-size: 20px; font-weight: 700; color: var(--texto-suave); }
+.monto-moneda { font-size: 13px; font-weight: 700; color: var(--texto-suave); letter-spacing: .04em; }
+
+.casilla { display: flex; align-items: flex-start; gap: 9px; font-size: 14.5px; font-weight: 600; cursor: pointer; }
+.casilla input { width: 19px; height: 19px; margin-top: 2px; accent-color: var(--verde); }
+
+/* ───── Chips ───── */
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+.chip {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: var(--tarjeta);
+  color: var(--texto);
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--verde); }
+.chip.puesto { background: var(--verde); border-color: var(--verde); color: #fff; }
+
+/* ───── Moneda ───── */
+.monedas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.moneda {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  padding: 15px 10px;
+  border: 2px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--tarjeta);
+  color: var(--texto);
+  cursor: pointer;
+}
+.moneda strong { font-size: 16px; }
+.moneda span { font-size: 12px; color: var(--texto-suave); letter-spacing: .04em; }
+.moneda.puesta { border-color: var(--verde); background: var(--verde-tenue); }
+
+/* ───── Los dos cajones ───── */
+.cajones { display: grid; gap: 14px; margin-top: 10px; }
+@media (min-width: 720px) { .cajones { grid-template-columns: 1fr 1fr; } }
+.cajon {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 15px;
+  background: var(--tarjeta);
+}
+.cajon-numero { border-top: 4px solid var(--verde); }
+.cajon-sentir { border-top: 4px solid var(--dorado); }
+.cajon-rotulo {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--texto-suave);
+  margin-bottom: 4px;
+}
+.cajon-nota { font-size: 12.5px; color: var(--texto-suave); margin-bottom: 14px; }
+
+.tipo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+.tipo-btn {
+  font: inherit;
+  font-weight: 650;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+  background: var(--tarjeta);
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+.tipo-btn.activo[data-tipo="salida"] { background: var(--rojo); border-color: var(--rojo); color: #fff; }
+.tipo-btn.activo[data-tipo="entrada"] { background: var(--verde); border-color: var(--verde); color: #fff; }
+
+/* ───── Radiografía ───── */
+.pregunta { margin-bottom: 18px; }
+.pregunta > label { display: block; font-weight: 650; font-size: 14.5px; margin-bottom: 7px; }
+.escala { display: flex; gap: 7px; flex-wrap: wrap; }
+.escala-btn {
+  font: inherit;
+  font-weight: 700;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+  background: var(--tarjeta);
+  color: var(--texto);
+  cursor: pointer;
+}
+.escala-btn.puesto { background: var(--verde); border-color: var(--verde); color: #fff; }
+.escala-pies { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--texto-suave); margin-top: 5px; }
+
+.radio-guardada { border-left: 4px solid var(--verde); }
+.radio-fecha { font-weight: 700; color: var(--verde); font-size: 14px; }
+.radio-par { font-size: 14px; margin-bottom: 9px; }
+.radio-par strong { display: block; font-size: 12.5px; color: var(--texto-suave); font-weight: 650; }
