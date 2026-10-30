@@ -32,6 +32,12 @@ const EMOCIONES = {
 
 const VERBOS = ['Recibir', 'Disfrutar', 'Confiar', 'Compartir'];
 
+// En este orden se pintan. 'Otro' al final para lo que no cae en ninguno.
+const GRUPOS = ['Casa y seguros', 'Servicios', 'Tarjetas y deudas', 'Impuestos', 'Otro'];
+
+// Lo que NUNCA sale en el respaldo de números: con esto alguien te cobra.
+const CAMPOS_SENSIBLES = ['telefono', 'cuenta', 'titular', 'ultimos4', 'correo'];
+
 const PREGUNTAS = [
   { id: 'angustia', tipo: 'escala', texto: '¿Qué tanto te angustia abrir tus números?',
     izq: 'Nada', der: 'Muchísimo',
@@ -72,6 +78,7 @@ const nuevoEstado = () => ({
   creado: { iso: new Date().toISOString(), zona: zona() },
   movimientos: [],
   radiografias: [],
+  fijos: [],
   meta: null,
   ver_grafica: true,
   respaldo: { ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }
@@ -504,13 +511,16 @@ function refrescarRegistro() {
   pintarChips($('#reg-verbos'), VERBOS, regVerbo, (v) => { regVerbo = v; refrescarRegistro(); });
 }
 
-function abrirRegistro() {
-  regTipo = 'salida';
+function abrirRegistro(previo) {
+  const p = previo || {};
+  regTipo = p.tipo || 'salida';
   regCategoria = '';
   regEmocion = '';
   regVerbo = '';
-  $('#reg-monto').value = '';
-  $('#reg-categoria').value = '';
+  $('#reg-monto').value = p.monto != null ? p.monto : '';
+  // Viene lleno, pero la pregunta del sentimiento sigue ahí sin contestar:
+  // el momento del movimiento es el momento, aunque el monto ya lo supiéramos.
+  $('#reg-categoria').value = p.categoria || '';
   $('#reg-escrito').value = '';
   $('#reg-gracias').checked = false;
   $('#reg-fecha').value = paraInput(new Date());
@@ -560,6 +570,292 @@ function borrarMovimiento(idMov) {
   guardar();
   pintarTodo();
   aviso('Borrado.');
+}
+
+/* ───────────────────────── Fijos: lo del mes ─────────────────────────
+   Un fijo es lo que se paga cada mes y ya se sabe que viene: la casa, la luz,
+   la tarjeta. No es un movimiento — es un recordatorio con números. Registrar
+   que se pagó sigue siendo un movimiento, y pasa por la pregunta del
+   sentimiento como cualquier otro.                                           */
+
+let fijoActual = null;   // el id abierto en el modal, o null si es nuevo
+
+const grupoDe = (f) => (GRUPOS.indexOf(f.grupo) >= 0 ? f.grupo : 'Otro');
+
+function fijoVacio() {
+  return {
+    id: id(), nombre: '', grupo: 'Casa y seguros', moneda: estado.moneda,
+    monto_mes: null, saldo: null, limite: null, tasa_anual: null,
+    dia_pago: null, autopago: false,
+    telefono: '', cuenta: '', titular: '', ultimos4: '', correo: '',
+    historial: null, revisar: '', nota: ''
+  };
+}
+
+function pintarResumenFijos() {
+  const caja = $('#resumen-fijos');
+  const fijos = estado.fijos;
+  if (!fijos.length) {
+    caja.innerHTML = '<article class="tarjeta"><h3>Todavía no hay fijos</h3>' +
+      '<p class="parrafo">Aquí va lo que pagas cada mes y ya sabes que viene: la ' +
+      'casa, la luz, las tarjetas. Verlos juntos es la mitad del trabajo.</p></article>';
+    return;
+  }
+  const mes = fijos.reduce((a, f) => a + (Number(f.monto_mes) || 0), 0);
+  const deuda = fijos.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
+  const porGrupo = {};
+  fijos.forEach((f) => {
+    const g = grupoDe(f);
+    porGrupo[g] = (porGrupo[g] || 0) + (Number(f.monto_mes) || 0);
+  });
+  let h = '<article class="tarjeta"><p class="cifra-rotulo">Lo que sale cada mes</p>' +
+          '<p class="fijos-total">' + escapar(dinero(mes)) + '</p>' +
+          '<p class="pista sin-margen">' + fijos.length + ' conceptos.</p>';
+  GRUPOS.forEach((g) => {
+    if (!porGrupo[g]) return;
+    h += '<div class="fijos-renglon"><span>' + escapar(g) + '</span><strong>' +
+         escapar(dinero(porGrupo[g])) + '</strong></div>';
+  });
+  h += '</article>';
+  if (deuda > 0) {
+    h += '<article class="tarjeta"><p class="cifra-rotulo">Lo que debes, de lo que tiene saldo anotado</p>' +
+         '<p class="fijos-total deuda">' + escapar(dinero(deuda)) + '</p>' +
+         '<p class="pista sin-margen">Solo cuenta los fijos donde escribiste un saldo. Con el ' +
+         'saldo y la tasa, el simulador de salida podrá decirte en cuántos meses sale.</p></article>';
+  }
+  caja.innerHTML = h;
+}
+
+function pintarFijos() {
+  pintarResumenFijos();
+  const caja = $('#lista-fijos');
+  caja.innerHTML = '';
+  if (!estado.fijos.length) return;
+
+  GRUPOS.forEach((g) => {
+    const delGrupo = estado.fijos.filter((f) => grupoDe(f) === g);
+    if (!delGrupo.length) return;
+    delGrupo.sort((a, b) => (Number(b.monto_mes) || 0) - (Number(a.monto_mes) || 0));
+    const suma = delGrupo.reduce((a, f) => a + (Number(f.monto_mes) || 0), 0);
+
+    const rot = document.createElement('div');
+    rot.className = 'grupo-rotulo';
+    rot.innerHTML = '<span>' + escapar(g) + '</span><span>' + escapar(dinero(suma)) + '</span>';
+    caja.appendChild(rot);
+
+    delGrupo.forEach((f) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'fijo' + (f.revisar ? ' revisar' : '');
+      b.dataset.fijo = f.id;
+
+      const detalle = [];
+      if (f.dia_pago) detalle.push('día ' + f.dia_pago);
+      if (f.autopago) detalle.push('se paga solo');
+      if (f.ultimos4) detalle.push('•••• ' + f.ultimos4);
+      if (f.revisar) detalle.push('confírmalo');
+
+      let cifras = '<span class="fijo-mes">' + escapar(dinero(f.monto_mes, f.moneda)) + '</span>';
+      if (Number(f.saldo) > 0) {
+        cifras += '<span class="fijo-saldo">debes ' + escapar(dinero(f.saldo, f.moneda)) + '</span>';
+      }
+      if (Number(f.tasa_anual) > 0) {
+        cifras += '<span class="fijo-tasa">' + escapar(String(f.tasa_anual)) + '% al año</span>';
+      }
+
+      b.innerHTML =
+        '<span class="fijo-cuerpo"><span class="fijo-nombre">' + escapar(f.nombre || 'Sin nombre') + '</span>' +
+        (detalle.length ? '<span class="fijo-detalle">' + escapar(detalle.join(' · ')) + '</span>' : '') +
+        '</span><span class="fijo-cifras">' + cifras + '</span>';
+      caja.appendChild(b);
+    });
+  });
+}
+
+function pintarHistorialFijo(f) {
+  const caja = $('#fijo-historial');
+  const h = f.historial;
+  if (!h || !Object.keys(h).length) { caja.innerHTML = ''; return; }
+  const meses = Object.keys(h);
+  const alto = Math.max.apply(null, meses.map((m) => Number(h[m]) || 0));
+  let barras = '';
+  meses.forEach((m) => {
+    const v = Number(h[m]) || 0;
+    const paso = alto > 0 ? Math.max(1, Math.round((v / alto) * 10)) : 1;
+    barras += '<span class="historial-mes"><span class="historial-palo h' + paso + '"></span>' +
+              '<span>' + escapar(m) + '</span></span>';
+  });
+  caja.innerHTML = '<article class="tarjeta bloque-resultado"><h3>Lo que pagaste cada mes</h3>' +
+    '<div class="historial">' + barras + '</div>' +
+    '<p class="pista">Viene de tu Excel. El año no está escrito en ninguna parte de esa hoja, ' +
+    'así que aquí va solo el mes. Esto no se suma a nada: es para que veas el tamaño.</p></article>';
+}
+
+function abrirFijo(idf) {
+  const f = idf ? estado.fijos.find((x) => x.id === idf) : null;
+  const d = f || fijoVacio();
+  fijoActual = f ? f.id : null;
+
+  $('#fijo-titulo').textContent = f ? (d.nombre || 'Un fijo') : 'Un fijo nuevo';
+  $('#fijo-nombre').value = d.nombre || '';
+  $('#fijo-grupo').value = grupoDe(d);
+  $('#fijo-monto').value = d.monto_mes != null ? d.monto_mes : '';
+  $('#fijo-dia').value = d.dia_pago != null ? d.dia_pago : '';
+  $('#fijo-autopago').checked = !!d.autopago;
+  $('#fijo-saldo').value = d.saldo != null ? d.saldo : '';
+  $('#fijo-limite').value = d.limite != null ? d.limite : '';
+  $('#fijo-tasa').value = d.tasa_anual != null ? d.tasa_anual : '';
+  $('#fijo-telefono').value = d.telefono || '';
+  $('#fijo-cuenta').value = d.cuenta || '';
+  $('#fijo-titular').value = d.titular || '';
+  $('#fijo-u4').value = d.ultimos4 || '';
+  $('#fijo-nota').value = d.nota || '';
+  const m = d.moneda || estado.moneda;
+  $('#fijo-moneda').textContent = m;
+  $('#fijo-moneda2').textContent = m;
+  $('#fijo-moneda3').textContent = m;
+
+  $('#fijo-revisar').innerHTML = d.revisar ? '<div class="aviso urge">' + escapar(d.revisar) + '</div>' : '';
+  $('#fijo-borrar').classList.toggle('oculto', !f);
+  $('#fijo-pague').classList.toggle('oculto', !f);
+  pintarHistorialFijo(d);
+
+  $('#modal-fijo').classList.remove('oculto');
+  setTimeout(() => $('#fijo-nombre').focus(), 50);
+}
+
+const numCampo = (sel) => {
+  const v = parseFloat($(sel).value);
+  return isNaN(v) ? null : v;
+};
+
+function guardarFijo() {
+  const nombre = $('#fijo-nombre').value.trim();
+  if (!nombre) {
+    aviso('Ponle nombre, aunque sea corto. Es lo único que necesita.');
+    $('#fijo-nombre').focus();
+    return;
+  }
+  const viejo = fijoActual ? estado.fijos.find((x) => x.id === fijoActual) : null;
+  const f = viejo || fijoVacio();
+
+  f.nombre = nombre;
+  f.grupo = $('#fijo-grupo').value;
+  f.monto_mes = numCampo('#fijo-monto');
+  f.dia_pago = numCampo('#fijo-dia');
+  f.autopago = $('#fijo-autopago').checked;
+  f.saldo = numCampo('#fijo-saldo');
+  f.limite = numCampo('#fijo-limite');
+  f.tasa_anual = numCampo('#fijo-tasa');
+  f.telefono = $('#fijo-telefono').value.trim();
+  f.cuenta = $('#fijo-cuenta').value.trim();
+  f.titular = $('#fijo-titular').value.trim();
+  f.ultimos4 = $('#fijo-u4').value.trim().slice(-4);
+  f.nota = $('#fijo-nota').value.trim();
+  f.moneda = f.moneda || estado.moneda;
+  f.revisar = '';   // lo editó ella: ya lo revisó, el aviso se va
+
+  if (!viejo) estado.fijos.push(f);
+  guardar();
+  fijoActual = null;
+  $('#modal-fijo').classList.add('oculto');
+  pintarTodo();
+  aviso('Guardado: ' + f.nombre);
+}
+
+function borrarFijo() {
+  const f = estado.fijos.find((x) => x.id === fijoActual);
+  if (!f) return;
+  const pregunta = 'Quitar "' + f.nombre + '" de tus fijos. ' +
+    'Los movimientos que ya registraste de el NO se borran. Continuar?';
+  if (!confirm(pregunta)) return;
+  estado.fijos = estado.fijos.filter((x) => x.id !== fijoActual);
+  guardar();
+  fijoActual = null;
+  $('#modal-fijo').classList.add('oculto');
+  pintarTodo();
+  aviso('Quitado de los fijos.');
+}
+
+// "Lo pagué" no guarda nada solo: abre el registro ya lleno, y la pregunta del
+// sentimiento sigue en blanco esperando. El momento es el momento.
+function pagarFijo() {
+  const f = estado.fijos.find((x) => x.id === fijoActual);
+  if (!f) return;
+  $('#modal-fijo').classList.add('oculto');
+  abrirRegistro({ tipo: 'salida', monto: f.monto_mes, categoria: f.nombre });
+}
+
+/* ── Traer fijos de un archivo: AGREGA, nunca reemplaza ── */
+
+// La huella de un fijo es su nombre MÁS lo que cuesta. No basta el nombre:
+// María paga tres seguros de vida y dos se llaman igual — con distinto monto.
+// Si sólo miráramos el nombre, el segundo se perdería en silencio.
+const huella = (f) => String(f.nombre || '').trim().toLowerCase() +
+                      '|' + (parseFloat(f.monto_mes) || 0).toFixed(2);
+
+async function importarFijos(archivo) {
+  const caja = $('#resultado-fijos');
+  let datos;
+  try { datos = await leerArchivo(archivo); }
+  catch (e) {
+    caja.innerHTML = '<div class="aviso urge">' + escapar(e.message) + '</div>';
+    return;
+  }
+  const lista = Array.isArray(datos.fijos) ? datos.fijos : null;
+  if (!lista) {
+    caja.innerHTML = '<div class="aviso urge">Ese archivo no trae una lista de fijos.</div>';
+    return;
+  }
+  const yaHay = estado.fijos.map(huella);
+  const puestos = [];
+  const saltados = [];
+  lista.forEach((crudo) => {
+    const nombre = String(crudo.nombre || '').trim();
+    if (!nombre) return;
+    if (yaHay.indexOf(huella(crudo)) >= 0) { saltados.push(nombre); return; }
+    const f = fijoVacio();
+    f.nombre = nombre;
+    f.grupo = GRUPOS.indexOf(crudo.grupo) >= 0 ? crudo.grupo : 'Otro';
+    f.moneda = crudo.moneda || estado.moneda;
+    ['monto_mes', 'saldo', 'limite', 'tasa_anual', 'dia_pago'].forEach((c) => {
+      const v = parseFloat(crudo[c]);
+      f[c] = isNaN(v) ? null : v;
+    });
+    f.autopago = !!crudo.autopago;
+    CAMPOS_SENSIBLES.forEach((c) => { f[c] = String(crudo[c] || '').trim(); });
+    f.ultimos4 = f.ultimos4.slice(-4);
+    f.historial = crudo.historial && typeof crudo.historial === 'object' ? crudo.historial : null;
+    f.revisar = String(crudo.revisar || '').trim();
+    f.nota = String(crudo.nota || '').trim();
+    estado.fijos.push(f);
+    yaHay.push(huella(f));
+    puestos.push(f);
+  });
+
+  if (!puestos.length) {
+    caja.innerHTML = '<div class="aviso calma"><strong>No había nada nuevo que traer.</strong>' +
+      '<p class="pista">Los ' + saltados.length + ' del archivo ya los tienes, y los dejé como están.</p></div>';
+    return;
+  }
+  guardar();
+  pintarTodo();
+
+  const mes = puestos.reduce((a, f) => a + (Number(f.monto_mes) || 0), 0);
+  const deuda = puestos.reduce((a, f) => a + (Number(f.saldo) || 0), 0);
+  const porRevisar = puestos.filter((f) => f.revisar);
+  const plural = puestos.length === 1 ? ' concepto.' : ' conceptos.';
+  let h = '<div class="aviso calma"><strong>Entraron ' + puestos.length + plural + '</strong>' +
+    '<p class="pista">Suman ' + escapar(dinero(mes)) + ' al mes' +
+    (deuda > 0 ? ', y ' + escapar(dinero(deuda)) + ' de saldo anotado' : '') + '.' +
+    (saltados.length ? ' Dejé ' + saltados.length + ' como estaban, ya los tenías.' : '') + '</p>';
+  if (porRevisar.length) {
+    h += '<p class="pista"><strong>' + porRevisar.length + ' traen un aviso para que los confirmes.</strong> ' +
+         'Salen con una raya dorada en la lista. Ábrelos, corrige el número y el aviso se va.</p>';
+  }
+  h += '</div>';
+  caja.innerHTML = h;
+  aviso('Listo: ' + puestos.length + ' fijos nuevos.', 5);
 }
 
 /* ───────────────────────── Modal: radiografía ───────────────────────── */
@@ -712,7 +1008,14 @@ function respaldoNumeros() {
     movimientos: estado.movimientos.map((m) => ({
       id: m.id, tipo: m.tipo, monto: m.monto, moneda: m.moneda,
       categoria: m.categoria, cuando: m.cuando, zona: m.zona
-    }))
+    })),
+    // Los fijos van sin teléfono, cuenta, titular, últimos 4 ni correo.
+    // Este archivo se puede mandar; con esos datos, no.
+    fijos: estado.fijos.map((f) => {
+      const limpio = Object.assign({}, f);
+      CAMPOS_SENSIBLES.forEach((c) => { delete limpio[c]; });
+      return limpio;
+    })
   };
   bajarArchivo('dineros-numeros-' + selloFecha() + '.json', JSON.stringify(datos, null, 2));
   estado.respaldo.ultimo_iso = new Date().toISOString();
@@ -884,6 +1187,7 @@ function pintarTodo() {
   pintarConstancia();
   pintarRadiografiaResumen();
   pintarMovimientos();
+  pintarFijos();
   pintarRadiografias();
   pintarEstadoRespaldo();
   pintarPersistencia();
@@ -902,6 +1206,13 @@ function enganchar() {
   }));
 
   $('#reg-guardar').addEventListener('click', guardarMovimiento);
+  $('#fijo-guardar').addEventListener('click', guardarFijo);
+  $('#fijo-borrar').addEventListener('click', borrarFijo);
+  $('#fijo-pague').addEventListener('click', pagarFijo);
+  $('#archivo-fijos').addEventListener('change', (e) => {
+    if (e.target.files[0]) importarFijos(e.target.files[0]);
+    e.target.value = '';
+  });
   $('#radio-guardar').addEventListener('click', guardarRadiografia);
   $('#meta-guardar').addEventListener('click', guardarMeta);
   $('#meta-quitar').addEventListener('click', () => {
@@ -951,6 +1262,7 @@ function enganchar() {
       if (cual === 'registro') abrirRegistro();
       if (cual === 'radiografia') abrirRadiografia();
       if (cual === 'meta') abrirMeta();
+      if (cual === 'fijo-nuevo') abrirFijo(null);
       return;
     }
     const cerrar = e.target.closest('[data-cerrar]');
@@ -966,6 +1278,9 @@ function enganchar() {
       pintarGrafica();
       return;
     }
+
+    const verFijo = e.target.closest('[data-fijo]');
+    if (verFijo) { abrirFijo(verFijo.dataset.fijo); return; }
 
     const borrar = e.target.closest('[data-borrar]');
     if (borrar) { borrarMovimiento(borrar.dataset.borrar); }

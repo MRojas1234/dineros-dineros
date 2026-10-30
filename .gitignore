@@ -1,0 +1,7 @@
+# Nada de datos aquí. Este repositorio es público: el código se ve, tus números no.
+# Los respaldos y los archivos de fijos viven en tu computadora, fuera de esta carpeta.
+*.json
+!manifest.webmanifest
+dineros-numeros-*
+dineros-completo-*
+mis-fijos-*

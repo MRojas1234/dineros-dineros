@@ -15,6 +15,15 @@ Es de María Rojas, y la puede repartir a quien quiera — por eso trae su `LICE
   cómo se siente. No en un cuestionario de bienvenida: en el movimiento.
 - **Guarda tu radiografía con su fecha**, y cada vez que la vuelves a contestar
   guarda una nueva. Nunca se encima una sobre otra.
+- **Fijos**: lo que se paga cada mes, agrupado y sumado — casa, servicios,
+  tarjetas, impuestos. Cada uno se edita entero: monto, día de pago, autopago,
+  saldo, límite, tasa anual, y los datos de contacto de quien cobra. Un botón
+  *Lo pagué* abre el registro ya lleno, con la pregunta del sentimiento todavía
+  en blanco: el momento del movimiento sigue siendo el momento.
+- **Traer fijos de un archivo JSON**: **agrega, nunca reemplaza**. Los movimientos
+  y las radiografías no se tocan, y lo que ya existe se queda como está. La
+  huella de un fijo es su nombre *más* su monto, porque dos recibos pueden
+  llamarse igual y costar distinto.
 - **Respaldo y restauración que de verdad funcionan**, con aviso de cuándo fue el
   último y un botón para *probar* un respaldo sin tocar nada.
 - **Versículo distinto cada día**, Reina-Valera 1909 (dominio público).
@@ -24,7 +33,28 @@ Es de María Rojas, y la puede repartir a quien quiera — por eso trae su `LICE
 - Funciona sin señal y se instala en la pantalla de inicio.
 
 Para después: el simulador de salida de deudas (avalancha y bola de nieve), el
-lector de facturas y los retos.
+lector de facturas y los retos. Los fijos ya guardan saldo y tasa anual, que es
+justo lo que el simulador va a necesitar.
+
+### Un archivo de fijos, por dentro
+
+```json
+{ "app": "Dineros Dineros", "tipo": "fijos",
+  "fijos": [ { "nombre": "...", "grupo": "Servicios", "moneda": "USD",
+               "monto_mes": 0, "saldo": null, "limite": null,
+               "tasa_anual": null, "dia_pago": null, "autopago": false,
+               "telefono": "", "cuenta": "", "titular": "", "ultimos4": "",
+               "correo": "", "historial": {"ene": 0}, "revisar": "", "nota": "" } ] }
+```
+
+`grupo` tiene que ser uno de: `Casa y seguros`, `Servicios`, `Tarjetas y deudas`,
+`Impuestos`, `Otro` — cualquier otra cosa cae en `Otro`. `revisar` pinta un aviso
+rojo dentro del fijo y una raya dorada en la lista; se borra solo en cuanto lo
+editas y guardas.
+
+**Un archivo así nunca va dentro de este repositorio.** Trae números de cuenta y
+últimos 4; este repositorio es público. Vive en tu computadora, y el `.gitignore`
+está puesto para que no se cuele por accidente.
 
 ---
 
@@ -56,10 +86,11 @@ rechaza cualquier dirección que no sea del mismo origen.
 
 ## El respaldo: dos archivos a propósito
 
-- **Respaldo de números** — montos, categorías y fechas. Ése lo puedes mandar por
-  donde quieras.
-- **Respaldo completo** — además trae tus radiografías y lo que escribiste en cada
-  movimiento. Ése **no** se manda por WhatsApp ni por correo: ahí se queda, en los
+- **Respaldo de números** — montos, categorías y fechas, y los fijos **sin** el
+  teléfono, la cuenta, el titular, los últimos 4 ni el correo. Ése lo puedes
+  mandar por donde quieras.
+- **Respaldo completo** — además trae tus radiografías, lo que escribiste en cada
+  movimiento y los datos de contacto de cada fijo. Ése **no** se manda por WhatsApp ni por correo: ahí se queda, en los
   servidores de alguien más. Va a una memoria o a tu computadora.
 
 Y hay un botón para **probar** un respaldo: lo lee, te dice qué trae y no toca

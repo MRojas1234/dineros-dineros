@@ -110,6 +110,27 @@
   </button>
 </section>
 
+<!-- ======== FIJOS ======== -->
+<section id="vista-fijos" class="vista oculto">
+  <div id="resumen-fijos"></div>
+  <div id="lista-fijos"></div>
+
+  <article class="tarjeta">
+    <h3>Agregar o traer</h3>
+    <div class="botonera">
+      <button class="btn btn-principal" data-abrir="fijo-nuevo">Agregar un fijo</button>
+      <label class="btn btn-archivo">
+        Traerlos de un archivo
+        <input type="file" id="archivo-fijos" accept="application/json,.json" hidden>
+      </label>
+    </div>
+    <p class="pista">Traerlos de un archivo <strong>agrega</strong>, no reemplaza: tus
+      movimientos y tus radiografías no se tocan. Si un fijo ya existe con el mismo
+      nombre, lo deja como está.</p>
+    <div id="resultado-fijos"></div>
+  </article>
+</section>
+
 <!-- ======== RADIOGRAFÍA ======== -->
 <section id="vista-radiografia" class="vista oculto">
   <article class="tarjeta">
@@ -202,6 +223,7 @@
 
 <nav class="pestanas">
   <button class="pestana activa" data-vista="hoy"><span>Hoy</span></button>
+  <button class="pestana" data-vista="fijos"><span>Fijos</span></button>
   <button class="pestana" data-vista="movimientos"><span>Movimientos</span></button>
   <button class="pestana" data-vista="radiografia"><span>Radiografía</span></button>
   <button class="pestana" data-vista="respaldo"><span>Respaldo</span></button>
@@ -333,6 +355,126 @@
     <div class="modal-pie">
       <button class="btn" id="meta-quitar">Quitar la meta</button>
       <button class="btn btn-principal" id="meta-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── Un fijo: ver y editar ───────── -->
+<div id="modal-fijo" class="telon oculto">
+  <div class="telon-caja ancho">
+    <div class="modal-cabecera">
+      <h2 id="fijo-titulo">Un fijo</h2>
+      <button class="btn-cerrar" data-cerrar="modal-fijo" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div id="fijo-revisar"></div>
+
+    <div class="cajones">
+      <div class="cajon cajon-numero">
+        <p class="cajon-rotulo">Lo que pagas</p>
+
+        <div class="campo">
+          <label for="fijo-nombre">¿Qué es?</label>
+          <input id="fijo-nombre" type="text" autocomplete="off" placeholder="Por ejemplo: la luz">
+        </div>
+
+        <div class="campo">
+          <label for="fijo-grupo">¿De qué grupo?</label>
+          <select id="fijo-grupo">
+            <option>Casa y seguros</option>
+            <option>Servicios</option>
+            <option>Tarjetas y deudas</option>
+            <option>Impuestos</option>
+            <option>Otro</option>
+          </select>
+        </div>
+
+        <div class="campo">
+          <label for="fijo-monto">¿Cuánto al mes?</label>
+          <div class="monto-caja">
+            <span class="monto-signo">$</span>
+            <input id="fijo-monto" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+            <span class="monto-moneda" id="fijo-moneda"></span>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="fijo-dia">¿Qué día se paga? <span class="opc">1 al 31, opcional</span></label>
+          <input id="fijo-dia" type="number" min="1" max="31" step="1" placeholder="—">
+        </div>
+
+        <div class="campo">
+          <label class="casilla">
+            <input type="checkbox" id="fijo-autopago">
+            <span>Se paga solo (autopago)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cajon cajon-deuda">
+        <p class="cajon-rotulo">Si es una deuda <span class="opc">opcional</span></p>
+        <p class="cajon-nota">Esto es lo que va a alimentar el simulador de salida de
+          deudas: con el saldo y la tasa se puede calcular en cuántos meses sale y
+          cuánto de interés paga.</p>
+
+        <div class="campo">
+          <label for="fijo-saldo">¿Cuánto debes hoy?</label>
+          <div class="monto-caja">
+            <span class="monto-signo">$</span>
+            <input id="fijo-saldo" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+            <span class="monto-moneda" id="fijo-moneda2"></span>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="fijo-limite">¿Cuál es el límite de la tarjeta?</label>
+          <div class="monto-caja">
+            <span class="monto-signo">$</span>
+            <input id="fijo-limite" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+            <span class="monto-moneda" id="fijo-moneda3"></span>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="fijo-tasa">Tasa de interés al año (%)</label>
+          <input id="fijo-tasa" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Por ejemplo: 29.99">
+        </div>
+      </div>
+    </div>
+
+    <div class="cajon cajon-sensible">
+      <p class="cajon-rotulo">Datos de contacto <span class="opc">se quedan en tu teléfono</span></p>
+      <p class="cajon-nota">🔒 Esto <strong>no entra en el respaldo de números</strong>,
+        solo en el completo. Y aquí nunca va el número completo de una tarjeta: con los
+        últimos 4 la reconoces, y con los 16 alguien compra.</p>
+      <div class="campo">
+        <label for="fijo-telefono">Teléfono de quien te cobra</label>
+        <input id="fijo-telefono" type="text" autocomplete="off" placeholder="—">
+      </div>
+      <div class="campo">
+        <label for="fijo-cuenta">Número de cuenta</label>
+        <input id="fijo-cuenta" type="text" autocomplete="off" placeholder="—">
+      </div>
+      <div class="campo">
+        <label for="fijo-titular">¿A nombre de quién está?</label>
+        <input id="fijo-titular" type="text" autocomplete="off" placeholder="—">
+      </div>
+      <div class="campo">
+        <label for="fijo-u4">Últimos 4 dígitos</label>
+        <input id="fijo-u4" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="—">
+      </div>
+      <div class="campo">
+        <label for="fijo-nota">Nota tuya</label>
+        <textarea id="fijo-nota" rows="2" placeholder="Lo que quieras recordar de este."></textarea>
+      </div>
+    </div>
+
+    <div id="fijo-historial"></div>
+
+    <div class="modal-pie">
+      <button class="btn" id="fijo-borrar">Borrar</button>
+      <button class="btn" id="fijo-pague">Lo pagué</button>
+      <button class="btn btn-principal" id="fijo-guardar">Guardar</button>
     </div>
   </div>
 </div>
