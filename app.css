@@ -543,7 +543,7 @@ textarea { resize: vertical; }
 .fijo:hover { border-color: var(--verde); }
 .fijo.revisar { border-left: 4px solid var(--dorado); }
 /* Son <span> dentro de un <button>: sin display:block se pegan en un renglón
-   y sale "el nombreconfírmalo". Pasó de verdad. */
+   y el nombre se pega con su detalle. Pasó de verdad. */
 .fijo-cuerpo { flex: 1; min-width: 0; display: block; }
 .fijo-nombre { font-weight: 650; display: block; }
 .fijo-detalle { font-size: 12.5px; color: var(--texto-suave); display: block; margin-top: 2px; }
