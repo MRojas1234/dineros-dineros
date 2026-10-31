@@ -927,7 +927,7 @@ function pagarFijo() {
 /* ── Traer fijos de un archivo: AGREGA, nunca reemplaza ── */
 
 // La huella de un fijo es su nombre MÁS lo que cuesta. No basta el nombre:
-// María paga tres seguros de vida y dos se llaman igual — con distinto monto.
+// se puede tener dos seguros que se llaman igual y cuestan distinto.
 // Si sólo miráramos el nombre, el segundo se perdería en silencio.
 const huella = (f) => String(f.nombre || '').trim().toLowerCase() +
                       '|' + (parseFloat(f.monto_mes) || 0).toFixed(2);
@@ -1071,8 +1071,8 @@ function planDeCorrecciones(lista) {
 
     let candidatos = estado.fijos.filter((f) => llave(f.nombre) === llave(nom));
 
-    // Dos fijos pueden llamarse igual: ella paga dos seguros de vida con el
-    // mismo nombre. Para esos, el archivo tiene que decir cual con monto_actual.
+    // Dos fijos pueden llamarse igual y costar distinto. Para esos, el archivo
+    // tiene que decir cual con monto_actual.
     if (candidatos.length > 1) {
       const m = parseFloat(cruda.monto_actual);
       if (!isNaN(m)) {
