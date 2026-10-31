@@ -120,7 +120,13 @@ function cargar() {
     if (!Array.isArray(estado.fijos)) estado.fijos = [];
     // Los fijos que ya estaban guardados pueden traer el historial en el formato
     // viejo. Se arregla aquí, al abrir, para que nadie tenga que importar de nuevo.
-    estado.fijos.forEach((f) => { f.historial = mesesAlDerecho(f.historial); });
+    // Los fijos guardados antes de que existiera el año del historial no traen
+    // ese campo. "No existe" no es lo mismo que "vacío" para ===, y esa
+    // diferencia ya engañó una vez: se empareja aquí, una sola vez, al abrir.
+    estado.fijos.forEach((f) => {
+      f.historial = mesesAlDerecho(f.historial);
+      if (f.anio_historial === undefined) f.anio_historial = null;
+    });
     estado.respaldo = Object.assign({ ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }, leido.respaldo || {});
     return true;
   } catch (e) {
@@ -719,13 +725,20 @@ let fijoActual = null;   // el id abierto en el modal, o null si es nuevo
 
 const grupoDe = (f) => (GRUPOS.indexOf(f.grupo) >= 0 ? f.grupo : 'Otro');
 
+/* Un año que no es un año no se guarda. "25" o "202" no son errores de dedo
+   graciosos: serían una etiqueta falsa pegada a una gráfica de dinero.      */
+function anioValido(n) {
+  const v = parseInt(n, 10);
+  return (v >= 1900 && v <= 2200) ? v : null;
+}
+
 function fijoVacio() {
   return {
     id: id(), nombre: '', grupo: 'Casa y seguros', moneda: estado.moneda,
     monto_mes: null, saldo: null, limite: null, tasa_anual: null,
     dia_pago: null, autopago: false,
     telefono: '', cuenta: '', titular: '', ultimos4: '', correo: '',
-    historial: null, revisar: '', nota: ''
+    historial: null, anio_historial: null, revisar: '', nota: ''
   };
 }
 
@@ -823,10 +836,21 @@ function pintarHistorialFijo(f) {
     barras += '<span class="historial-mes"><span class="historial-palo h' + paso + '"></span>' +
               '<span>' + escapar(m) + '</span></span>';
   });
-  caja.innerHTML = '<article class="tarjeta bloque-resultado"><h3>Lo que pagaste cada mes</h3>' +
+  // El mes sin su año no es un dato: dos fijos pueden tener barras de años
+  // distintos y verse iguales. Si el año está anotado, se dice. Si no, se dice
+  // que no se sabe — que es más honesto que callarlo.
+  const anio = f.anio_historial;
+  const titulo = anio ? 'Lo que pagaste cada mes de ' + anio : 'Lo que pagaste cada mes';
+  const pie = anio
+    ? 'Estas barras son de <strong>' + anio + '</strong>. No las compares con las de otro ' +
+      'fijo sin ver primero de qué año son las suyas. Esto no se suma a nada: es para que ' +
+      'veas el tamaño.'
+    : '<strong>Este historial no tiene año anotado.</strong> Tu Excel no lo traía escrito, ' +
+      'así que aquí va solo el mes — y un mes sin año no se puede comparar contra otro ' +
+      'fijo. Arriba hay una casilla para ponerle el año.';
+  caja.innerHTML = '<article class="tarjeta bloque-resultado"><h3>' + escapar(titulo) + '</h3>' +
     '<div class="historial">' + barras + '</div>' +
-    '<p class="pista">Viene de tu Excel. El año no está escrito en ninguna parte de esa hoja, ' +
-    'así que aquí va solo el mes. Esto no se suma a nada: es para que veas el tamaño.</p></article>';
+    '<p class="pista">' + pie + '</p></article>';
 }
 
 function abrirFijo(idf) {
@@ -848,6 +872,7 @@ function abrirFijo(idf) {
   $('#fijo-titular').value = d.titular || '';
   $('#fijo-u4').value = d.ultimos4 || '';
   $('#fijo-nota').value = d.nota || '';
+  $('#fijo-anio').value = d.anio_historial != null ? d.anio_historial : '';
   const m = d.moneda || estado.moneda;
   $('#fijo-moneda').textContent = m;
   $('#fijo-moneda2').textContent = m;
@@ -877,6 +902,14 @@ function guardarFijo() {
   const viejo = fijoActual ? estado.fijos.find((x) => x.id === fijoActual) : null;
   const f = viejo || fijoVacio();
 
+  // Lo que el aviso dorado le pide confirmar son las CIFRAS, no la etiqueta del
+  // año. Me quedo con una huella de ellas antes de escribir, para saber después
+  // si de verdad confirmó algo.
+  const huella = (x) => JSON.stringify([x.nombre, x.grupo, x.monto_mes, x.saldo,
+                                        x.limite, x.tasa_anual, x.dia_pago, x.autopago]);
+  const cifrasAntes = viejo ? huella(viejo) : null;
+  const anioAntes = viejo && viejo.anio_historial != null ? viejo.anio_historial : null;
+
   f.nombre = nombre;
   f.grupo = $('#fijo-grupo').value;
   f.monto_mes = numCampo('#fijo-monto');
@@ -890,8 +923,14 @@ function guardarFijo() {
   f.titular = $('#fijo-titular').value.trim();
   f.ultimos4 = $('#fijo-u4').value.trim().slice(-4);
   f.nota = $('#fijo-nota').value.trim();
+  f.anio_historial = anioValido($('#fijo-anio').value);
   f.moneda = f.moneda || estado.moneda;
-  f.revisar = '';   // lo editó ella: ya lo revisó, el aviso se va
+  // Abrir y guardar sin tocar nada sigue quitando el aviso: es su forma de decir
+  // "ya lo vi, está bien". Lo único que NO lo quita es haber venido nada más a
+  // ponerle el año al historial — eso no confirma ninguna cifra, y borrarle el
+  // recordatorio la dejaría sin saber que aún le falta el dato.
+  const soloPusoElAnio = viejo && huella(f) === cifrasAntes && f.anio_historial !== anioAntes;
+  if (!soloPusoElAnio) f.revisar = '';
 
   if (!viejo) estado.fijos.push(f);
   guardar();
@@ -969,6 +1008,7 @@ async function importarFijos(archivo) {
       const v = parseFloat(crudo[c]);
       f[c] = isNaN(v) ? null : v;
     });
+    f.anio_historial = anioValido(crudo.anio_historial);
     f.autopago = !!crudo.autopago;
     CAMPOS_SENSIBLES.forEach((c) => { f[c] = String(crudo[c] || '').trim(); });
     f.ultimos4 = f.ultimos4.slice(-4);
@@ -1031,6 +1071,7 @@ const CORREGIBLES = [
   { campo: 'limite',       en: 'limite',     rotulo: 'Límite',               como: 'dinero' },
   { campo: 'tasa_anual',   en: 'tasa_anual', rotulo: 'Tasa anual',           como: 'tasa' },
   { campo: 'dia_pago',     en: 'dia_pago',   rotulo: 'Día de pago',          como: 'numero' },
+  { campo: 'anio_historial', en: 'anio_historial', rotulo: 'Año del historial', como: 'numero' },
   { campo: 'autopago',     en: 'autopago',   rotulo: 'Autopago',             como: 'si_no' },
   { campo: 'nota',         en: 'nota',       rotulo: 'Nota',                 como: 'texto' },
   { campo: 'revisar',      en: 'revisar',    rotulo: 'Aviso',                como: 'texto' }
