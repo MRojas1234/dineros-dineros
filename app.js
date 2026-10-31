@@ -81,6 +81,8 @@ const nuevoEstado = () => ({
   fijos: [],
   meta: null,
   ver_grafica: true,
+  plan_deuda: { extra: null, orden: 'tasa' },
+  ver_plan: true,
   respaldo: { ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }
 });
 
@@ -755,14 +757,15 @@ function pintarResumenFijos() {
   if (deuda > 0) {
     h += '<article class="tarjeta"><p class="cifra-rotulo">Lo que debes, de lo que tiene saldo anotado</p>' +
          '<p class="fijos-total deuda">' + escapar(dinero(deuda)) + '</p>' +
-         '<p class="pista sin-margen">Solo cuenta los fijos donde escribiste un saldo. Con el ' +
-         'saldo y la tasa, el simulador de salida podrá decirte en cuántos meses sale.</p></article>';
+         '<p class="pista sin-margen">Solo cuenta los fijos donde escribiste un saldo. ' +
+         'Abajo está el plan para salir.</p></article>';
   }
   caja.innerHTML = h;
 }
 
 function pintarFijos() {
   pintarResumenFijos();
+  pintarSimulador();
   const caja = $('#lista-fijos');
   caja.innerHTML = '';
   if (!estado.fijos.length) return;
@@ -991,6 +994,322 @@ async function importarFijos(archivo) {
   h += '</div>';
   caja.innerHTML = h;
   aviso('Listo: ' + puestos.length + ' fijos nuevos.', 5);
+}
+
+/* ───────────────────── Simulador: salir de las deudas ─────────────────────
+   Esto no adivina nada. Solo puede proyectar una deuda que tenga ESCRITOS su
+   saldo y su tasa; las que les falta uno de los dos se nombran aparte, sin
+   rellenarlas. Un cero inventado aquí no sería un detalle: sería un plan de
+   años construido sobre un número que nadie escribió.
+
+   Lo que la cuenta NO sabe se dice en la pantalla, no se esconde: no conoce
+   sus ingresos, así que no puede saber si el extra que escriba se sostiene.
+   Una proyección que cruza ese límite no es conservadora ni optimista — es
+   ficción con decimales. El límite se nombra y ahí se detiene.              */
+
+const TOPE_MESES = 1200;   // 100 años: si no acabó aquí, no acaba nunca
+
+// Solo las de la moneda de la app. Mezclar monedas en una suma da un numero
+// que no significa nada, y se veria igual de confiable que uno bueno. Las de
+// otra moneda no se convierten a ojo: se declaran y ya.
+function deudasSimulables() {
+  return estado.fijos
+    .filter((f) => Number(f.saldo) > 0 && Number(f.tasa_anual) > 0 &&
+                   (f.moneda || estado.moneda) === estado.moneda)
+    .map((f) => ({
+      nombre: f.nombre || 'Sin nombre',
+      moneda: f.moneda || estado.moneda,
+      saldo: Number(f.saldo),
+      tasa: Number(f.tasa_anual),
+      pago: Number(f.monto_mes) || 0
+    }));
+}
+
+// Las que traen una pieza y les falta la otra. No se simulan: se declaran.
+function deudasIncompletas() {
+  const faltaSaldo = [];
+  const faltaTasa = [];
+  const otraMoneda = [];
+  estado.fijos.forEach((f) => {
+    const s = Number(f.saldo) > 0;
+    const t = Number(f.tasa_anual) > 0;
+    if (t && !s) faltaSaldo.push(f.nombre || 'Sin nombre');
+    if (s && !t) faltaTasa.push(f.nombre || 'Sin nombre');
+    if (s && t && (f.moneda || estado.moneda) !== estado.moneda) {
+      otraMoneda.push((f.nombre || 'Sin nombre') + ' (' + (f.moneda || '?') + ')');
+    }
+  });
+  return { faltaSaldo: faltaSaldo, faltaTasa: faltaTasa, otraMoneda: otraMoneda };
+}
+
+/* El motor. Mes por mes, igual que lo haría el banco:
+   primero corre el interés, después se reparte el pago.
+
+   rodar = true  : cuando una deuda muere, su pago se pasa a la siguiente.
+                   Eso es lo que hace funcionar un plan, y no cuesta un peso más.
+   rodar = false : cuando una deuda muere, ese dinero se desaparece. Es lo que
+                   pasa solo, sin plan.
+   orden = 'tasa'  → la más cara primero (avalancha)
+   orden = 'saldo' → la más chica primero (bola de nieve)
+   orden = null    → nadie ataca a nadie; cada una su mínimo.                */
+function simularDeudas(deudas, extra, orden, rodar) {
+  const ds = deudas.map((d) => Object.assign({}, d));
+  const minimo = {};
+  ds.forEach((d) => { minimo[d.nombre] = d.pago; });
+  const todosLosMinimos = ds.reduce((a, d) => a + d.pago, 0);
+
+  let mes = 0;
+  let interesPagado = 0;
+  const muertes = [];
+  const viva = (d) => d.saldo > 0.005;
+
+  while (ds.some(viva) && mes < TOPE_MESES) {
+    mes += 1;
+    ds.forEach((d) => {
+      if (!viva(d)) return;
+      const i = (d.saldo * d.tasa) / 100 / 12;
+      d.saldo += i;
+      interesPagado += i;
+    });
+
+    const vivas = ds.filter(viva);
+    let bolsa = extra + (rodar
+      ? todosLosMinimos
+      : vivas.reduce((a, d) => a + minimo[d.nombre], 0));
+
+    // El mínimo de cada una va primero: nadie se queda sin pagar lo suyo.
+    vivas.forEach((d) => {
+      const p = Math.min(minimo[d.nombre], d.saldo, bolsa);
+      d.saldo -= p;
+      bolsa -= p;
+    });
+
+    // Lo que sobró ataca al objetivo, hasta acabarlo, y sigue con el siguiente.
+    if (orden) {
+      const quedan = ds.filter(viva);
+      quedan.sort(orden === 'tasa'
+        ? (a, b) => b.tasa - a.tasa
+        : (a, b) => a.saldo - b.saldo);
+      for (let k = 0; k < quedan.length && bolsa > 0.005; k++) {
+        const p = Math.min(bolsa, quedan[k].saldo);
+        quedan[k].saldo -= p;
+        bolsa -= p;
+      }
+    }
+
+    ds.forEach((d) => {
+      if (!viva(d) && muertes.every((m) => m.nombre !== d.nombre)) {
+        muertes.push({ nombre: d.nombre, mes: mes });
+      }
+    });
+  }
+
+  return {
+    meses: mes,
+    interes: interesPagado,
+    acabo: ds.every((d) => !viva(d)),
+    muertes: muertes
+  };
+}
+
+// "36 meses" dicho como lo diría una persona.
+function enAnos(meses) {
+  if (meses < 12) return meses + (meses === 1 ? ' mes' : ' meses');
+  const a = Math.floor(meses / 12);
+  const m = meses % 12;
+  let t = a + (a === 1 ? ' año' : ' años');
+  if (m) t += ' y ' + m + (m === 1 ? ' mes' : ' meses');
+  return t;
+}
+
+function pintarSimulador() {
+  const caja = $('#simulador');
+  if (!caja) return;
+  const deudas = deudasSimulables();
+  const huecos = deudasIncompletas();
+
+  if (!deudas.length) {
+    // Sin las dos piezas no hay nada que calcular, y hay que decir por qué.
+    const falta = huecos.faltaSaldo.length + huecos.faltaTasa.length;
+    const ajenas = huecos.otraMoneda.length;
+    caja.innerHTML = '<article class="tarjeta"><h3>Salir de las deudas</h3>' +
+      '<p class="parrafo">Para decirte en cuántos meses sales, cada deuda necesita ' +
+      '<strong>dos números escritos</strong>: cuánto debes y a qué tasa. ' +
+      (falta
+        ? 'Hay ' + falta + (falta === 1 ? ' donde falta' : ' donde falta') +
+          ' uno de los dos. ' + (falta === 1 ? 'Ábrela' : 'Ábrelas') +
+          ' y escríbelo: no lo voy a adivinar.'
+        : 'Abre un fijo de tarjeta y escríbelos.') +
+      (ajenas
+        ? ' Y ' + ajenas + ' están completas pero en otra moneda, así que van aparte.'
+        : '') +
+      '</p></article>';
+    return;
+  }
+
+  const plan = estado.plan_deuda || { extra: null, orden: 'tasa' };
+  const extra = Number(plan.extra) || 0;
+  const orden = plan.orden === 'saldo' ? 'saldo' : 'tasa';
+  const mon = estado.moneda;   // nunca la de la primera de la lista
+  const totalSaldo = deudas.reduce((a, d) => a + d.saldo, 0);
+  const totalPago = deudas.reduce((a, d) => a + d.pago, 0);
+  const interesMes = deudas.reduce((a, d) => a + (d.saldo * d.tasa) / 100 / 12, 0);
+
+  const hoy = simularDeudas(deudas, 0, null, false);
+  const conPlan = simularDeudas(deudas, extra, orden, true);
+  const elOtro = simularDeudas(deudas, extra, orden === 'tasa' ? 'saldo' : 'tasa', true);
+
+  const abierto = estado.ver_plan !== false;
+  let h = '<article class="tarjeta">' +
+    '<div class="grafica-cabecera"><h3>Salir de las deudas</h3>' +
+    '<button type="button" class="btn btn-chico" data-accion="plan">' +
+    (abierto ? 'Ocultar' : 'Ver el plan') + '</button></div>' +
+    '<p class="cifra-rotulo">Lo que te cuesta cada mes solo en intereses</p>' +
+    '<p class="fijos-total deuda">' + escapar(dinero(interesMes, mon)) + '</p>' +
+    '<p class="pista">De ' + escapar(dinero(totalSaldo, mon)) + ' en ' + deudas.length +
+    ' deudas, pagando ' + escapar(dinero(totalPago, mon)) + ' al mes. Ese dinero no baja ' +
+    'nada de lo que debes: es la renta de deberlo.</p>';
+
+  // El hallazgo que más importa, y es gratis: redirigir lo que se libera.
+  if (hoy.acabo && conPlan.acabo) {
+    const mesesMenos = hoy.meses - conPlan.meses;
+    const ahorro = hoy.interes - conPlan.interes;
+    h += '<div class="sim-comparar">' +
+      '<div class="sim-caso"><span class="sim-caso-rotulo">Como va hoy</span>' +
+      '<strong>' + escapar(enAnos(hoy.meses)) + '</strong>' +
+      '<span class="sim-caso-nota">' + escapar(dinero(hoy.interes, mon)) + ' de intereses</span></div>' +
+      '<div class="sim-caso bueno"><span class="sim-caso-rotulo">Con plan</span>' +
+      '<strong>' + escapar(enAnos(conPlan.meses)) + '</strong>' +
+      '<span class="sim-caso-nota">' + escapar(dinero(conPlan.interes, mon)) + ' de intereses</span></div>' +
+      '</div>';
+    if (mesesMenos > 0 || ahorro > 0) {
+      h += '<p class="sim-gane"><strong>' + mesesMenos + ' meses menos</strong> y ' +
+        '<strong>' + escapar(dinero(ahorro, mon)) + ' menos de intereses</strong>' +
+        (extra > 0
+          ? ', agregando ' + escapar(dinero(extra, mon)) + ' al mes.'
+          : ', y sin poner un peso más.') + '</p>';
+    }
+    h += '<p class="pista">La diferencia no es pagar más: es que cuando una deuda se acaba, ' +
+      'su pago <strong>se pasa a la siguiente</strong> en lugar de desaparecerse del bolsillo. ' +
+      'Eso es todo el truco.</p>';
+  } else if (!hoy.acabo) {
+    h += '<p class="sim-nunca"><strong>Como va hoy, no se acaba.</strong> Lo que pagas al mes ' +
+      'no alcanza a cubrir ni los intereses de alguna de estas deudas, así que crece sola. ' +
+      'No es falta de disciplina: es aritmética, y hay que cambiar el pago o la tasa.</p>';
+  }
+  h += '</article>';
+
+  // Cerrado, se queda con lo de arriba: la cifra y los dos caminos. Eso es lo
+  // que sirve de un vistazo; lo demas es para cuando se siente a moverle.
+  if (!abierto) { caja.innerHTML = h; return; }
+
+  // Lo que ella decide: cuánto agrega y en qué orden.
+  h += '<article class="tarjeta">' +
+    '<h3>Muévele</h3>' +
+    '<div class="campo"><label for="deuda-extra">Lo que puedo agregar cada mes</label>' +
+    '<input type="number" id="deuda-extra" inputmode="decimal" min="0" step="10" ' +
+    'placeholder="0" value="' +
+    (plan.extra !== null && plan.extra !== undefined ? escapar(String(plan.extra)) : '') +
+    '"></div>' +
+    '<p class="pista">Escribe lo que de verdad puedes sostener todos los meses, no lo más que ' +
+    'podrías un mes bueno. Un extra chico que aguanta un año le gana a uno grande que se cae ' +
+    'en el mes dos — y esta cuenta no sabe cuánto ganas, así que ese juicio es tuyo.</p>' +
+    '<p class="cifra-rotulo separado">Cuál atacar primero</p>' +
+    '<div class="sim-ordenes">' +
+    '<button type="button" class="sim-orden' + (orden === 'tasa' ? ' puesta' : '') + '" data-orden="tasa">' +
+    '<strong>La más cara</strong><span>la de tasa más alta</span></button>' +
+    '<button type="button" class="sim-orden' + (orden === 'saldo' ? ' puesta' : '') + '" data-orden="saldo">' +
+    '<strong>La más chica</strong><span>para ver una caer pronto</span></button>' +
+    '</div>';
+
+  // Honestidad: si los dos caminos dan casi lo mismo, se dice. Vender la
+  // avalancha como si fuera mucho mejor cuando son $36 sería mentir con cifras.
+  if (conPlan.acabo && elOtro.acabo) {
+    const difInt = Math.abs(conPlan.interes - elOtro.interes);
+    const difMes = Math.abs(conPlan.meses - elOtro.meses);
+    if (difMes === 0 && difInt < Math.max(50, totalSaldo * 0.01)) {
+      h += '<p class="sim-igual">En tu caso los dos caminos acaban <strong>el mismo mes</strong>, ' +
+        'y se diferencian en ' + escapar(dinero(difInt, mon)) + ' de intereses. ' +
+        'Escoge el que te mantenga haciéndolo: es lo único que cambia el resultado.</p>';
+    } else {
+      h += '<p class="pista">El otro camino acabaría en ' + escapar(enAnos(elOtro.meses)) +
+        ' con ' + escapar(dinero(elOtro.interes, mon)) + ' de intereses.</p>';
+    }
+  }
+  h += '</article>';
+
+  // El orden en que caen, con el plan puesto. Esto es lo que se siente.
+  if (conPlan.acabo && conPlan.muertes.length) {
+    h += '<article class="tarjeta"><h3>El orden en que se acaban</h3><div class="sim-caida">';
+    conPlan.muertes.forEach((m) => {
+      h += '<div class="sim-caida-fila"><span class="sim-caida-mes">mes ' + m.mes + '</span>' +
+        '<span class="sim-caida-nombre">' + escapar(m.nombre) + '</span></div>';
+    });
+    h += '</div><p class="pista">' +
+      (extra > 0
+        ? 'Con los ' + escapar(dinero(extra, mon)) + ' que agregaste y el orden que escogiste. '
+        : 'Con lo que ya pagas hoy y el orden que escogiste, sin agregar nada. ') +
+      'Cada una que cae libera su pago para la siguiente, y por eso las últimas caen ' +
+      'más rápido.</p></article>';
+  }
+
+  // Las deudas que casi no bajan: el pago apenas cubre el interés.
+  const frenadas = deudas.filter((d) => {
+    const i = (d.saldo * d.tasa) / 100 / 12;
+    return d.pago > 0 && (d.pago - i) < d.pago * 0.2;
+  });
+  if (frenadas.length) {
+    h += '<article class="tarjeta aviso-suave"><h3>Estas casi no bajan</h3>';
+    frenadas.forEach((d) => {
+      const i = (d.saldo * d.tasa) / 100 / 12;
+      h += '<p class="parrafo"><strong>' + escapar(d.nombre) + '</strong> — de los ' +
+        escapar(dinero(d.pago, d.moneda)) + ' que pagas, ' + escapar(dinero(i, d.moneda)) +
+        ' se van en intereses. A lo que debes le bajan ' +
+        escapar(dinero(d.pago - i, d.moneda)) + '.</p>';
+    });
+    h += '<p class="pista">No es que estés haciendo algo mal: el pago mínimo está calculado ' +
+      'para que apenas avance. Es la que más gana si le mandas el extra.</p></article>';
+  }
+
+  // Lo que esta cuenta no sabe. Va en la pantalla, no en una nota al pie.
+  h += '<article class="tarjeta"><h3>Lo que esta cuenta no sabe</h3><ul class="lista-limpia">';
+  if (huecos.faltaSaldo.length) {
+    const nS = huecos.faltaSaldo.length;
+    h += '<li><strong>' + nS + (nS === 1 ? ' deuda tiene' : ' deudas tienen') +
+      ' tasa pero no saldo</strong> — ' +
+      escapar(huecos.faltaSaldo.join(', ')) + '. No están en esta cuenta, así que lo que debes ' +
+      'de verdad es más que ' + escapar(dinero(totalSaldo, mon)) + '.</li>';
+  }
+  if (huecos.faltaTasa.length) {
+    const nT = huecos.faltaTasa.length;
+    h += '<li><strong>' + nT + (nT === 1 ? ' tiene' : ' tienen') +
+      ' saldo pero no tasa</strong> — ' +
+      escapar(huecos.faltaTasa.join(', ')) + '. Sin la tasa no se puede proyectar, y no me la ' +
+      'voy a inventar.</li>';
+  }
+  if (huecos.otraMoneda.length) {
+    const nM = huecos.otraMoneda.length;
+    h += '<li><strong>' + nM + (nM === 1 ? ' está' : ' están') +
+      ' en otra moneda</strong> — ' +
+      escapar(huecos.otraMoneda.join(', ')) + '. No las sumo con las demás: un total que ' +
+      'mezcla monedas no significa nada, y no voy a convertirlas a un tipo de cambio ' +
+      'que me invente.</li>';
+  }
+  h += '<li><strong>No sé cuánto ganas.</strong> Por eso no te propongo un extra: no tengo ' +
+    'manera de saber si lo aguantas. Si el número que escribes no se sostiene, la cuenta de ' +
+    'arriba es bonita y falsa.</li>' +
+    '<li><strong>Supone que la tasa no cambia</strong> y que no vuelves a usar la tarjeta. ' +
+    'Una compra nueva en medio del plan mueve todo.</li>' +
+    '</ul></article>';
+
+  caja.innerHTML = h;
+}
+
+function guardarPlanDeuda(cambios) {
+  estado.plan_deuda = Object.assign({ extra: null, orden: 'tasa' },
+                                    estado.plan_deuda || {}, cambios);
+  guardar();
+  pintarSimulador();
 }
 
 /* ───────────────────────── Modal: radiografía ───────────────────────── */
@@ -1406,7 +1725,16 @@ function enganchar() {
     const ir = e.target.closest('[data-ir]');
     if (ir) { irA(ir.dataset.ir); return; }
 
+    const ord = e.target.closest('[data-orden]');
+    if (ord) { guardarPlanDeuda({ orden: ord.dataset.orden }); return; }
+
     const accion = e.target.closest('[data-accion]');
+    if (accion && accion.dataset.accion === 'plan') {
+      estado.ver_plan = estado.ver_plan === false;
+      guardar();
+      pintarSimulador();
+      return;
+    }
     if (accion && accion.dataset.accion === 'grafica') {
       estado.ver_grafica = !estado.ver_grafica;
       guardar();
@@ -1419,6 +1747,15 @@ function enganchar() {
 
     const borrar = e.target.closest('[data-borrar]');
     if (borrar) { borrarMovimiento(borrar.dataset.borrar); }
+  });
+
+  // El extra se guarda al salir del campo, no en cada tecla: repintar a media
+  // cifra le quitaria el cursor de las manos.
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'deuda-extra') {
+      const v = parseFloat(e.target.value);
+      guardarPlanDeuda({ extra: isNaN(v) || v < 0 ? null : v });
+    }
   });
 
   // Tocar el fondo oscuro cierra el modal, pero nunca la bienvenida.

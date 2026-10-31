@@ -584,3 +584,64 @@ textarea { resize: vertical; }
   border-top: 1px solid var(--borde);
   margin: 20px 0 2px;
 }
+
+/* ───── Simulador: salir de las deudas ─────
+   Dos cajas lado a lado para comparar "como va hoy" contra "con plan". La
+   buena se marca en verde y la de hoy se deja en texto normal a proposito:
+   no es un regano, es el punto de partida. Nada aqui usa estilos en linea
+   porque el Content-Security-Policy los bloquea sin avisar. */
+.sim-comparar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 0; }
+.sim-caso {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sim-caso.bueno { border-color: var(--verde); background: var(--verde-tenue); }
+.sim-caso-rotulo { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .05em; color: var(--texto-suave); }
+.sim-caso strong { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.sim-caso-nota { font-size: 12.5px; color: var(--texto-suave); }
+
+.sim-gane { font-size: 15px; margin: 12px 0 0; color: var(--verde-hondo); }
+.sim-nunca { font-size: 14.5px; margin: 12px 0 0; color: var(--rojo);
+             background: var(--rojo-tenue); padding: 12px; border-radius: var(--radio); }
+.sim-igual { font-size: 14px; margin: 12px 0 0; color: var(--texto-suave); }
+
+/* Los dos ordenes: mismo gesto que el escogedor de moneda. */
+.sim-ordenes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+.sim-orden {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  text-align: center;
+  padding: 13px 10px;
+  border: 2px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--tarjeta);
+  color: var(--texto);
+  cursor: pointer;
+}
+.sim-orden strong { font-size: 15px; }
+.sim-orden span { font-size: 12px; color: var(--texto-suave); }
+.sim-orden.puesta { border-color: var(--verde); background: var(--verde-tenue); }
+
+/* El orden en que caen. El mes va en una columna fija para que se lean
+   alineados, como una cuenta. */
+.sim-caida { margin-top: 4px; }
+.sim-caida-fila { display: flex; gap: 12px; align-items: baseline;
+                  padding: 7px 0; border-top: 1px solid var(--borde); }
+.sim-caida-mes { font-size: 12.5px; font-weight: 700; color: var(--verde);
+                 min-width: 62px; letter-spacing: .02em; }
+.sim-caida-nombre { font-size: 14.5px; }
+
+.tarjeta.aviso-suave { border-color: var(--dorado); background: var(--dorado-tenue); }
+
+.lista-limpia { margin: 6px 0 0; padding-left: 18px; }
+.lista-limpia li { font-size: 14px; color: var(--texto-suave); margin-bottom: 9px; line-height: 1.5; }
+.lista-limpia li strong { color: var(--texto); }
+.cifra-rotulo.separado { margin-top: 16px; }

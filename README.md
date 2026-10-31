@@ -139,3 +139,41 @@ código, no. Todo esto se escribió desde cero.
 Los versículos son de la Santa Biblia **Reina-Valera 1909**, que está en dominio
 público. Las traducciones modernas (RV1960, NVI, NTV) tienen derechos de autor
 vigentes y no se pueden repartir así.
+
+---
+
+### El simulador: salir de las deudas
+
+Está en la pantalla **Fijos**, debajo de los totales. Toma cada fijo que tenga
+escritos **los dos** números — `saldo` y `tasa_anual` — y corre el mes a mes
+como lo haría el banco: primero el interés, después el pago.
+
+Compara dos caminos:
+
+- **Como va hoy** — cada deuda con su mínimo, y cuando una se acaba ese dinero
+  se desaparece del bolsillo.
+- **Con plan** — cuando una deuda se acaba, su pago **se pasa a la siguiente**.
+  No cuesta un peso más, y es casi todo el efecto.
+
+El orden lo escoge quien usa la app: la de tasa más alta (sale más barato) o la
+de saldo más chico (se ve caer una pronto). Cuando los dos caminos acaban el
+mismo mes y la diferencia en intereses es menor al 1% de la deuda, la app lo
+**dice** en lugar de vender el primero como si fuera mucho mejor.
+
+**Lo que el simulador se niega a hacer:**
+
+- **No inventa un saldo ni una tasa que falten.** Las deudas a las que les falta
+  uno de los dos se nombran aparte, con su nombre, y se dice que el total real es
+  mayor. Un cero inventado aquí sería un plan de años encima de un número que
+  nadie escribió.
+- **No suma monedas distintas.** Solo entran las deudas en la moneda de la app;
+  las demás se declaran. No hay conversión a un tipo de cambio inventado.
+- **No propone cuánto pagar de más.** La app no conoce los ingresos de nadie, así
+  que no puede saber si un extra se sostiene. Lo dice en la pantalla: si el
+  número no aguanta, la proyección es bonita y falsa.
+- **No se cuelga con una deuda imposible.** Si el pago no cubre ni el interés, la
+  deuda crece sola; el motor corta a los 1,200 meses y lo dice con todas sus
+  letras en vez de dibujar un plan que no existe.
+
+También marca las deudas donde el pago apenas cubre el interés — esas donde el
+mínimo está calculado para que casi no avancen.

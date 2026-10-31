@@ -7,7 +7,7 @@
 // Cualquier cosa de otro dominio no se toca — no hay ninguna, y si algún día se
 // colara una, aquí se ve.
 
-const CACHE = 'dineros-dineros-v3';
+const CACHE = 'dineros-dineros-v4';
 
 const ARCHIVOS = [
   './',
