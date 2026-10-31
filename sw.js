@@ -7,7 +7,7 @@
 // Cualquier cosa de otro dominio no se toca — no hay ninguna, y si algún día se
 // colara una, aquí se ve.
 
-const CACHE = 'dineros-dineros-v5';
+const CACHE = 'dineros-dineros-v6';
 
 const ARCHIVOS = [
   './',
@@ -20,8 +20,13 @@ const ARCHIVOS = [
   './icono-512.png'
 ];
 
+// Ojo con esto: `addAll` a secas pide los archivos PASANDO POR EL CACHE del
+// navegador, así que el cache nuevo se llenaba con los archivos viejos y subir
+// el número de versión no servía de nada. Era el bug del "ábrela dos veces".
+// `cache: 'reload'` obliga a traerlos de la red.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  const frescos = ARCHIVOS.map((u) => new Request(u, { cache: 'reload' }));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(frescos)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
