@@ -2037,6 +2037,46 @@ function enganchar() {
 
 /* ───────────────────────── Arranque ───────────────────────── */
 
+/* ── Que una sola apertura baste ─────────────────────────────────
+   Al publicar una versión nueva, el service worker nuevo se instala MIENTRAS
+   esta página ya está corriendo el código viejo — que se sirvió del cache antes
+   de que el worker nuevo existiera. Por eso había que abrir la app dos veces.
+   Aquí, cuando el worker nuevo toma el control, la página se recarga sola.
+
+   Tres frenos, y ninguno es adorno:
+
+   1. UNA recarga por visita, anotada en sessionStorage. Una recarga sin techo
+      es la forma más fácil de dejar una app inservible: se recargaría sin
+      parar y no habría ni cómo leer la pantalla. Si el techo no se puede
+      anotar, NO se recarga — mejor dos aperturas que un bucle.
+   2. Nunca encima de lo que está escribiendo. Si hay una pantalla abierta, un
+      campo con el cursor, o una lista de correcciones esperando su "Aplicar",
+      se queda como está. No pasa nada: la próxima vez que abra ya va a traer
+      lo nuevo de todos modos.
+   3. No en la primera instalación. Si no había worker, no hay código viejo que
+      tirar y recargar no serviría de nada.                                  */
+function prepararRecargaAlActualizar() {
+  const TECHO = 'dd-ya-recargue';
+  const habiaWorker = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!habiaWorker) return;
+
+    if (document.querySelector('.telon:not(.oculto)')) return;
+    if (correccionesPendientes) return;
+    const foco = document.activeElement;
+    if (foco && /^(INPUT|TEXTAREA|SELECT)$/.test(foco.tagName)) return;
+
+    try {
+      if (sessionStorage.getItem(TECHO)) return;
+      sessionStorage.setItem(TECHO, '1');
+    } catch (e) {
+      return;
+    }
+    location.reload();
+  });
+}
+
 function arrancar() {
   enganchar();
   const habia = cargar();
@@ -2048,6 +2088,7 @@ function arrancar() {
   }
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    prepararRecargaAlActualizar();
     navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('Sin modo sin señal:', e));
   }
 }
