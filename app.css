@@ -645,3 +645,30 @@ textarea { resize: vertical; }
 .lista-limpia li { font-size: 14px; color: var(--texto-suave); margin-bottom: 9px; line-height: 1.5; }
 .lista-limpia li strong { color: var(--texto); }
 .cifra-rotulo.separado { margin-top: 16px; }
+
+/* ── Correcciones: lo que cambiaria, antes de cambiarlo ── */
+.aviso.ojo { background: var(--dorado-tenue); border-color: var(--dorado); color: var(--texto); }
+.pista.separado, .botonera.separado { margin-top: 16px; }
+.correcciones { padding-left: 0; }
+.correcciones > .corr-fijo {
+  list-style: none; margin-bottom: 14px; padding-left: 10px;
+  border-left: 3px solid var(--dorado);
+}
+.corr-fijo > strong { display: block; color: var(--texto); font-size: 15px; margin-bottom: 5px; }
+.corr-fijo .lista-limpia { padding-left: 0; margin-top: 0; }
+.corr-campo {
+  list-style: none; display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 6px; margin-bottom: 7px;
+}
+.corr-rotulo {
+  flex: 1 1 100%; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--texto-suave);
+}
+.corr-antes { text-decoration: line-through; color: var(--texto-suave); }
+.corr-flecha { color: var(--dorado); font-weight: 700; }
+.corr-despues { font-weight: 600; color: var(--texto); font-variant-numeric: tabular-nums; }
+.pruebas li { margin-bottom: 7px; }
+.corr-porque {
+  display: block; font-size: 12px; color: var(--texto-suave);
+  margin-bottom: 6px; line-height: 1.4;
+}

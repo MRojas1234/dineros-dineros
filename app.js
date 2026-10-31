@@ -945,6 +945,15 @@ async function importarFijos(archivo) {
     caja.innerHTML = '<div class="aviso urge">Ese archivo no trae una lista de fijos.</div>';
     return;
   }
+
+  // Por aqui entran dos archivos distintos. El que se declara 'correcciones'
+  // cambia fijos que ya existen, y por eso NO se aplica al abrirlo: se pinta
+  // la lista completa de lo que cambiaria y se espera el boton.
+  if (String(datos.tipo || '').trim().toLowerCase() === 'correcciones') {
+    correccionesPendientes = planDeCorrecciones(lista);
+    pintarPlanDeCorrecciones(correccionesPendientes);
+    return;
+  }
   const yaHay = estado.fijos.map(huella);
   const puestos = [];
   const saltados = [];
@@ -994,6 +1003,259 @@ async function importarFijos(archivo) {
   h += '</div>';
   caja.innerHTML = h;
   aviso('Listo: ' + puestos.length + ' fijos nuevos.', 5);
+}
+
+/* ──────────────── Traer CORRECCIONES de un archivo ────────────────
+   Importar agrega. Esto es lo otro: cambiar lo que ya existe.
+
+   Nunca aplica nada al abrir el archivo. Calcula lo que cambiaría, lo pinta
+   completo —lo que tienes y lo que dice el archivo, campo por campo— y espera
+   un botón. Los efectos apagados son el estado normal, no un descuido: un
+   archivo que corrige saldos y tasas no se ejecuta solo.
+
+   Y nada se pierde: al aplicar, el valor anterior queda escrito en la nota del
+   fijo, con su fecha. Si el cambio estuvo mal, ahí está de dónde venía.
+
+   Lo que NO toca, a propósito:
+   - El historial. Sus meses no traen año, así que mezclar 2025 con 2026 daría
+     una suma sin significado con cara de buena.
+   - Teléfono, cuenta, titular, últimos 4 y correo. Así un archivo de
+     correcciones se puede mandar o guardar sin llevar con qué cobrarte. */
+
+const CORREGIBLES = [
+  { campo: 'nombre_nuevo', en: 'nombre',     rotulo: 'Nombre',               como: 'texto' },
+  { campo: 'grupo',        en: 'grupo',      rotulo: 'Grupo',                como: 'grupo' },
+  { campo: 'moneda',       en: 'moneda',     rotulo: 'Moneda',               como: 'texto' },
+  { campo: 'monto_mes',    en: 'monto_mes',  rotulo: 'Lo que cuesta al mes', como: 'dinero' },
+  { campo: 'saldo',        en: 'saldo',      rotulo: 'Saldo',                como: 'dinero' },
+  { campo: 'limite',       en: 'limite',     rotulo: 'Límite',               como: 'dinero' },
+  { campo: 'tasa_anual',   en: 'tasa_anual', rotulo: 'Tasa anual',           como: 'tasa' },
+  { campo: 'dia_pago',     en: 'dia_pago',   rotulo: 'Día de pago',          como: 'numero' },
+  { campo: 'autopago',     en: 'autopago',   rotulo: 'Autopago',             como: 'si_no' },
+  { campo: 'nota',         en: 'nota',       rotulo: 'Nota',                 como: 'texto' },
+  { campo: 'revisar',      en: 'revisar',    rotulo: 'Aviso',                como: 'texto' }
+];
+
+let correccionesPendientes = null;
+
+const llave = (s) => String(s || '').trim().toLowerCase();
+
+function comoSeVe(v, como) {
+  if (v === null || v === undefined || v === '') return '(vacío)';
+  if (como === 'dinero') return dinero(Number(v));
+  if (como === 'tasa') return Number(v).toFixed(2) + '%';
+  if (como === 'si_no') return v ? 'sí' : 'no';
+  return String(v);
+}
+
+// Compara como se guardaria, no como viene escrito: "27.27" y 27.27 son el
+// mismo numero, y no vale la pena ofrecerte un cambio que no cambia nada.
+function mismoValor(hay, viene, como) {
+  if (como === 'dinero' || como === 'tasa' || como === 'numero') {
+    const a = hay === null || hay === '' ? null : Number(hay);
+    const b = viene === null || viene === '' ? null : Number(viene);
+    if (a === null || b === null) return a === b;
+    return Math.abs(a - b) < 0.005;
+  }
+  if (como === 'si_no') return !!hay === !!viene;
+  return String(hay || '') === String(viene || '');
+}
+
+/* Arma el plan. No escribe nada. */
+function planDeCorrecciones(lista) {
+  const plan = { cambios: [], sin_cambio: [], no_hallados: [], ambiguos: [], avisos: [] };
+
+  lista.forEach((cruda) => {
+    const nom = String(cruda.nombre || '').trim();
+    if (!nom) return;
+
+    let candidatos = estado.fijos.filter((f) => llave(f.nombre) === llave(nom));
+
+    // Dos fijos pueden llamarse igual: ella paga dos seguros de vida con el
+    // mismo nombre. Para esos, el archivo tiene que decir cual con monto_actual.
+    if (candidatos.length > 1) {
+      const m = parseFloat(cruda.monto_actual);
+      if (!isNaN(m)) {
+        candidatos = candidatos.filter((f) => Math.abs((Number(f.monto_mes) || 0) - m) < 0.005);
+      }
+    }
+    if (!candidatos.length) { plan.no_hallados.push(nom); return; }
+    if (candidatos.length > 1) { plan.ambiguos.push(nom); return; }
+
+    const f = candidatos[0];
+    if (cruda.historial) {
+      plan.avisos.push('A ' + nom + ' no le toqué el historial: sus meses no traen año.');
+    }
+    CAMPOS_SENSIBLES.forEach((c) => {
+      if (cruda[c]) plan.avisos.push('A ' + nom + ' no le toqué ' + c + ': eso se teclea en la app.');
+    });
+
+    const campos = [];
+    CORREGIBLES.forEach((d) => {
+      if (!(d.campo in cruda)) return;
+      let viene = cruda[d.campo];
+      if (d.como === 'dinero' || d.como === 'tasa' || d.como === 'numero') {
+        // null a proposito = vaciar el campo. Pero basura NO es permiso para
+        // vaciar: un numero mal escrito tirando un saldo bueno seria el peor
+        // regalo de este modo. Se rechaza el campo y se avisa.
+        if (viene !== null && viene !== '') {
+          const v = parseFloat(viene);
+          if (isNaN(v)) {
+            plan.avisos.push('A ' + nom + ' no le toqu\u00e9 ' + d.rotulo.toLowerCase() +
+                             ': "' + viene + '" no es un n\u00famero.');
+            return;
+          }
+          viene = v;
+        } else {
+          viene = null;
+        }
+      } else if (d.como === 'si_no') {
+        viene = !!viene;
+      } else {
+        viene = String(viene === null || viene === undefined ? '' : viene).trim();
+      }
+      if (d.como === 'grupo' && GRUPOS.indexOf(viene) < 0) {
+        plan.avisos.push('A ' + nom + ' no le cambié el grupo: "' + viene + '" no existe.');
+        return;
+      }
+      if (d.campo === 'nombre_nuevo' && !viene) return;
+      const hay = f[d.en];
+      if (mismoValor(hay, viene, d.como)) return;
+      campos.push({ en: d.en, rotulo: d.rotulo, como: d.como, antes: hay, despues: viene });
+    });
+
+    if (!campos.length) plan.sin_cambio.push(nom);
+    else plan.cambios.push({
+      id: f.id, nombre: f.nombre, campos: campos,
+      por_que: String(cruda.por_que || '').trim()
+    });
+  });
+
+  return plan;
+}
+
+/* Pinta el plan completo y espera. Aqui no se decide nada todavia. */
+function pintarPlanDeCorrecciones(plan) {
+  const caja = $('#resultado-fijos');
+  const n = plan.cambios.length;
+
+  if (!n) {
+    let h = '<div class="aviso calma"><strong>No hay nada que corregir.</strong>' +
+            '<p class="pista">';
+    if (plan.sin_cambio.length) {
+      h += 'Los ' + plan.sin_cambio.length + ' del archivo ya tienen esos mismos valores. ';
+    }
+    if (plan.no_hallados.length) {
+      h += 'No encontré: ' + escapar(plan.no_hallados.join(', ')) + '. ';
+    }
+    if (plan.ambiguos.length) {
+      h += 'Tienes más de un fijo llamado ' + escapar(plan.ambiguos.join(', ')) +
+           ', así que el archivo necesita decir cuál con "monto_actual". ';
+    }
+    h += '</p></div>';
+    caja.innerHTML = h;
+    correccionesPendientes = null;
+    return;
+  }
+
+  let h = '<div class="aviso ojo"><strong>Esto es lo que cambiaría. Todavía no cambié nada.</strong>' +
+    '<p class="pista">Léelo completo antes de aplicarlo. Son tus saldos y tus tasas: ' +
+    'de aquí salen los años que te dice el simulador.</p></div>' +
+    '<article class="tarjeta">' +
+    '<h3>' + n + (n === 1 ? ' fijo cambiaría' : ' fijos cambiarían') + '</h3>' +
+    '<ul class="lista-limpia correcciones">';
+
+  plan.cambios.forEach((c) => {
+    h += '<li class="corr-fijo"><strong>' + escapar(c.nombre) + '</strong>';
+    if (c.por_que) h += '<span class="corr-porque">' + escapar(c.por_que) + '</span>';
+    h += '<ul class="lista-limpia">';
+    c.campos.forEach((k) => {
+      h += '<li class="corr-campo"><span class="corr-rotulo">' + escapar(k.rotulo) + '</span>' +
+           '<span class="corr-antes">' + escapar(comoSeVe(k.antes, k.como)) + '</span>' +
+           '<span class="corr-flecha">→</span>' +
+           '<span class="corr-despues">' + escapar(comoSeVe(k.despues, k.como)) + '</span></li>';
+    });
+    h += '</ul></li>';
+  });
+  h += '</ul>';
+
+  // Las tres pruebas baratas. Si alguna truena, no se aplica.
+  h += '<p class="pista"><strong>Antes de aplicar, tres pruebas de diez segundos:</strong></p>' +
+    '<ul class="lista-limpia pruebas">' +
+    '<li>Busca <strong>dos que te sepas de memoria</strong>. Si dicen otra cosa, no apliques.</li>' +
+    '<li>¿Aparece cambiando <strong>algo que tú sabes que está bien</strong>? Ese renglón vale ' +
+    'más que todos los demás juntos.</li>' +
+    '<li>¿Quiere cambiar <strong>casi todo</strong>? Entonces el problema es del archivo, no ' +
+    'de tus fijos.</li>' +
+    '</ul>';
+
+  const otros = [];
+  if (plan.sin_cambio.length) {
+    otros.push(plan.sin_cambio.length + ' ya estaban igual: ' + escapar(plan.sin_cambio.join(', ')));
+  }
+  if (plan.no_hallados.length) {
+    otros.push('No encontré ' + plan.no_hallados.length + ': ' +
+               escapar(plan.no_hallados.join(', ')));
+  }
+  if (plan.ambiguos.length) {
+    otros.push('Tienes más de uno llamado ' + escapar(plan.ambiguos.join(', ')) +
+               '. El archivo tiene que decir cuál con "monto_actual".');
+  }
+  plan.avisos.forEach((a) => otros.push(escapar(a)));
+  if (otros.length) {
+    h += '<p class="pista separado"><strong>Lo demás del archivo:</strong></p>' +
+         '<ul class="lista-limpia">';
+    otros.forEach((o) => { h += '<li class="pista">' + o + '</li>'; });
+    h += '</ul>';
+  }
+
+  h += '<div class="botonera separado">' +
+    '<button type="button" class="btn" data-accion="cancelar-correcciones">No, déjalo así</button>' +
+    '<button type="button" class="btn btn-principal" data-accion="aplicar-correcciones">' +
+    'Aplicar ' + (n === 1 ? 'el cambio' : 'los ' + n + ' cambios') + '</button>' +
+    '</div></article>';
+
+  caja.innerHTML = h;
+}
+
+/* Ahora sí escribe. Y deja escrito de dónde venía cada valor. */
+function aplicarCorrecciones() {
+  const plan = correccionesPendientes;
+  if (!plan || !plan.cambios.length) return;
+
+  const hoy = new Date();
+  const fecha = hoy.getDate() + ' ' + MESES[hoy.getMonth()];
+  let cuantos = 0;
+
+  plan.cambios.forEach((c) => {
+    const f = estado.fijos.filter((x) => x.id === c.id)[0];
+    if (!f) return;
+    const rastro = c.campos.map((k) =>
+      k.rotulo.toLowerCase() + ': ' + comoSeVe(k.antes, k.como) +
+      ' → ' + comoSeVe(k.despues, k.como)).join(' · ');
+    c.campos.forEach((k) => { f[k.en] = k.despues; });
+    // El valor viejo no se borra: queda arriba en la nota, con fecha.
+    const linea = '[' + fecha + '] ' + rastro + (c.por_que ? ' \u2014 ' + c.por_que : '');
+    f.nota = f.nota ? linea + '\n' + f.nota : linea;
+    cuantos += 1;
+  });
+
+  correccionesPendientes = null;
+  guardar();
+  pintarTodo();
+  $('#resultado-fijos').innerHTML =
+    '<div class="aviso calma"><strong>Listo: cambié ' + cuantos +
+    (cuantos === 1 ? ' fijo.' : ' fijos.') + '</strong>' +
+    '<p class="pista">Lo que tenían antes quedó escrito en su nota, con la fecha. ' +
+    'Ábrelos y lo ves. Si algo salió mal, de ahí lo regresas.</p></div>';
+  aviso('Listo: ' + cuantos + (cuantos === 1 ? ' fijo corregido.' : ' fijos corregidos.'), 5);
+}
+
+function cancelarCorrecciones() {
+  correccionesPendientes = null;
+  $('#resultado-fijos').innerHTML =
+    '<div class="aviso calma"><strong>No cambié nada.</strong>' +
+    '<p class="pista">Tus fijos quedaron igual que estaban.</p></div>';
 }
 
 /* ───────────────────── Simulador: salir de las deudas ─────────────────────
@@ -1739,6 +2001,15 @@ function enganchar() {
       estado.ver_grafica = !estado.ver_grafica;
       guardar();
       pintarGrafica();
+      return;
+    }
+
+    if (accion && accion.dataset.accion === 'aplicar-correcciones') {
+      aplicarCorrecciones();
+      return;
+    }
+    if (accion && accion.dataset.accion === 'cancelar-correcciones') {
+      cancelarCorrecciones();
       return;
     }
 
