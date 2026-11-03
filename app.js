@@ -109,6 +109,23 @@ function mesesAlDerecho(h) {
   return Object.keys(limpio).length ? limpio : null;
 }
 
+// Un fijo se endereza en UN solo lugar, y por aqui pasan los dos caminos: abrir
+// la app y restaurar un respaldo. Cuando esto vivia suelto dentro de cargar(),
+// restaurar no lo hacia — y de hecho restaurar ni siquiera traia los fijos.
+// Dos caminos para el mismo dato se separan solos; uno solo, no.
+function normalizarFijos(lista) {
+  if (!Array.isArray(lista)) return [];
+  return lista.map((f) => {
+    const fijo = Object.assign({}, f);
+    fijo.historial = mesesAlDerecho(fijo.historial);
+    // Los fijos guardados antes de que existiera el ano del historial no traen
+    // ese campo. "No existe" no es lo mismo que "vacio" para ===, y esa
+    // diferencia ya engano una vez.
+    if (fijo.anio_historial === undefined) fijo.anio_historial = null;
+    return fijo;
+  });
+}
+
 let estado = nuevoEstado();
 
 function cargar() {
@@ -117,16 +134,10 @@ function cargar() {
     if (!crudo) return false;
     const leido = JSON.parse(crudo);
     estado = Object.assign(nuevoEstado(), leido);
-    if (!Array.isArray(estado.fijos)) estado.fijos = [];
     // Los fijos que ya estaban guardados pueden traer el historial en el formato
-    // viejo. Se arregla aquí, al abrir, para que nadie tenga que importar de nuevo.
-    // Los fijos guardados antes de que existiera el año del historial no traen
-    // ese campo. "No existe" no es lo mismo que "vacío" para ===, y esa
-    // diferencia ya engañó una vez: se empareja aquí, una sola vez, al abrir.
-    estado.fijos.forEach((f) => {
-      f.historial = mesesAlDerecho(f.historial);
-      if (f.anio_historial === undefined) f.anio_historial = null;
-    });
+    // viejo. Se enderezan aquí, al abrir, para que nadie tenga que importar de
+    // nuevo — por la misma puerta que usa restaurar().
+    estado.fijos = normalizarFijos(estado.fijos);
     estado.respaldo = Object.assign({ ultimo_iso: null, ultimo_tipo: null, ultima_prueba_iso: null }, leido.respaldo || {});
     return true;
   } catch (e) {
@@ -1810,12 +1821,17 @@ function leerArchivo(archivo) {
 function describir(datos) {
   const movs = Array.isArray(datos.movimientos) ? datos.movimientos : [];
   const radios = Array.isArray(datos.radiografias) ? datos.radiografias : [];
+  // Los pagos fijos se cuentan aqui porque antes NO se contaban: el probador
+  // contestaba "tu respaldo sirve" sin haber mirado si traia los fijos, y
+  // restaurar los dejaba en cero. Lo que no se cuenta, no se extrana.
+  const fijos = Array.isArray(datos.fijos) ? datos.fijos : [];
   const fechas = movs.map((m) => new Date(m.cuando)).filter((d) => !isNaN(d));
   fechas.sort((a, b) => a - b);
   const porMoneda = sumaPorMoneda(movs);
   return {
     movs: movs.length,
     radios: radios.length,
+    fijos: fijos.length,
     desde: fechas.length ? fechaCorta(fechas[0].toISOString()) : null,
     hasta: fechas.length ? fechaCorta(fechas[fechas.length - 1].toISOString()) : null,
     tipo: datos.tipo || 'desconocido',
@@ -1826,7 +1842,8 @@ function describir(datos) {
 
 function textoDescripcion(d) {
   let html = '<p class="parrafo"><strong>' + d.movs + '</strong> movimiento' + (d.movs === 1 ? '' : 's') +
-    ' y <strong>' + d.radios + '</strong> radiografía' + (d.radios === 1 ? '' : 's') + '.</p>';
+    ', <strong>' + d.radios + '</strong> radiografía' + (d.radios === 1 ? '' : 's') +
+    ' y <strong>' + d.fijos + '</strong> pago' + (d.fijos === 1 ? '' : 's') + ' fijo' + (d.fijos === 1 ? '' : 's') + '.</p>';
   if (d.desde) html += '<p class="parrafo">Del ' + d.desde + ' al ' + d.hasta + '.</p>';
   if (d.monedas.length) html += '<p class="parrafo">Monedas que trae: ' + d.monedas.join(', ') + '.</p>';
   if (d.generado) html += '<p class="parrafo">Ese respaldo se hizo el ' + d.generado + ' (tipo: ' + d.tipo + ').</p>';
@@ -1838,8 +1855,19 @@ async function probarRespaldo(archivo) {
   try {
     const datos = await leerArchivo(archivo);
     const d = describir(datos);
-    caja.innerHTML = '<div class="aviso calma bloque-resultado">' +
-      '<strong>Tu respaldo sirve.</strong>' + textoDescripcion(d) +
+    // "Sirve" es un adjetivo sin objeto: sirve ¿para qué? Lo que de veras hay
+    // que saber antes de restaurar es si el archivo trae MENOS de lo que ya
+    // tienes, porque restaurar reemplaza, no suma.
+    const menos = [];
+    if (d.movs < estado.movimientos.length) menos.push('movimientos (tienes ' + estado.movimientos.length + ', el archivo trae ' + d.movs + ')');
+    if (d.radios < estado.radiografias.length) menos.push('radiografías (tienes ' + estado.radiografias.length + ', el archivo trae ' + d.radios + ')');
+    if (d.fijos < estado.fijos.length) menos.push('pagos fijos (tienes ' + estado.fijos.length + ', el archivo trae ' + d.fijos + ')');
+    const alerta = menos.length
+      ? '<p class="parrafo"><strong>Ojo:</strong> ese archivo trae menos que lo que tienes hoy en ' +
+        menos.join('; ') + '. Si lo restauras, eso se pierde.</p>'
+      : '';
+    caja.innerHTML = '<div class="aviso ' + (menos.length ? 'urge' : 'calma') + ' bloque-resultado">' +
+      '<strong>Ese archivo se puede leer. Esto es lo que trae.</strong>' + textoDescripcion(d) + alerta +
       '<p class="parrafo sin-margen">No cambié nada de lo que tienes ahorita.</p></div>';
     estado.respaldo.ultima_prueba_iso = new Date().toISOString();
     guardar();
@@ -1856,23 +1884,37 @@ async function restaurar(archivo) {
     const datos = await leerArchivo(archivo);
     const d = describir(datos);
     const aviso1 = d.tipo === 'numeros'
-      ? '\n\nOJO: es un respaldo SOLO DE NÚMEROS. Tus radiografías y lo que escribiste no vienen ahí, y se van a perder.'
+      ? '\n\nOJO: es un respaldo SOLO DE NÚMEROS. Tus radiografías, lo que escribiste y los datos de cuenta de tus pagos (titular, teléfono, número de cuenta) no vienen ahí, y se van a perder.'
       : '';
     const ok = confirm(
       'Vas a reemplazar lo que tienes hoy (' + estado.movimientos.length + ' movimientos, ' +
-      estado.radiografias.length + ' radiografías) por lo que trae el archivo (' +
-      d.movs + ' movimientos, ' + d.radios + ' radiografías).' + aviso1 +
+      estado.radiografias.length + ' radiografías, ' + estado.fijos.length + ' pagos fijos) ' +
+      'por lo que trae el archivo (' + d.movs + ' movimientos, ' + d.radios + ' radiografías, ' +
+      d.fijos + ' pagos fijos).' + aviso1 +
       '\n\nEsto no se puede deshacer. ¿Le seguimos?'
     );
     if (!ok) { caja.innerHTML = '<p class="parrafo">No se tocó nada.</p>'; return; }
 
+    // Aquí estaba el bug que costaba los pagos fijos: esta lista decía qué se
+    // restaura, y 'fijos' no aparecía en ella — así que caían al arreglo vacío
+    // de nuevoEstado() y nada avisaba. Lo mismo el plan de deuda y las dos
+    // preferencias de ver. Una lista escrita a mano se olvida de lo que se
+    // agregó después: ahora se nombran TODAS las llaves del estado, y lo que el
+    // archivo no traiga se queda como está en vez de borrarse.
     const base = nuevoEstado();
     estado = Object.assign(base, {
       moneda: datos.moneda || estado.moneda,
       nombre: datos.nombre || estado.nombre,
+      creado: datos.creado || estado.creado,
       movimientos: Array.isArray(datos.movimientos) ? datos.movimientos : [],
       radiografias: Array.isArray(datos.radiografias) ? datos.radiografias : [],
+      // Por la misma puerta que al abrir la app: un respaldo viejo puede traer
+      // el historial con llaves "01".."12" y aquí se endereza igual que allá.
+      fijos: normalizarFijos(datos.fijos),
       meta: datos.meta || null,
+      ver_grafica: typeof datos.ver_grafica === 'boolean' ? datos.ver_grafica : base.ver_grafica,
+      plan_deuda: Object.assign({}, base.plan_deuda, datos.plan_deuda || {}),
+      ver_plan: typeof datos.ver_plan === 'boolean' ? datos.ver_plan : base.ver_plan,
       respaldo: { ultimo_iso: new Date().toISOString(), ultimo_tipo: 'restaurado', ultima_prueba_iso: null }
     });
     guardar();
